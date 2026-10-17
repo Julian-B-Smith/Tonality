@@ -90,7 +90,8 @@ def _context(tonic: int | str | None, key_name: str | None) -> AnalyticalContext
 
 def _profiles(profile_version: str | None):
     """Load a key-profile set by version, or None to use the engine default
-    (kk-1982.1 — the pinned A5/A7 stability contract). Surfaces an actionable
+    (tkp-cbms.1 since 2026-06-17; consumers that need the old margin shape pin
+    kk-1982.1 explicitly, as A5 does). Surfaces an actionable
     ValueError on an unknown version (the loader lists the known versions)."""
     if profile_version is None:
         return None
@@ -337,9 +338,10 @@ def key_induction(pc_weights: list[float], profile_version: str | None = None) -
     """Ranked key candidates for duration-weighted pitch-class content
     (12 weights, index = pc). All 24 candidates, scores, and the top-two margin.
     profile_version selects the versioned key-profile set: default (None) uses
-    kk-1982.1; 'tkp-cbms.1' is the opt-in Temperley-Kostka-Payne profile (better-
-    balanced for major keys / less dominant-biased — A6 brief-9). The result cites
-    the profile_version used."""
+    tkp-cbms.1 (Temperley-Kostka-Payne, the default since 2026-06-17 — more
+    accurate on which key, but its margins are mode-asymmetric); 'kk-1982.1' is
+    the Krumhansl-Kessler alternative, better balanced when the margin is used as a
+    control signal. The result cites the profile_version used."""
     return infer_key(pc_weights, profiles=_profiles(profile_version)).to_dict()
 
 
@@ -549,8 +551,8 @@ def key_tracking(
     """Local key tracking: key regions through time for a list of events —
     the canonical event form [onset_beats, duration_beats, midi_note,
     velocity?, voice?]. Windowed key induction (same
-    versioned profiles; profile_version selects the set — default kk-1982.1,
-    'tkp-cbms.1' the opt-in Temperley-Kostka-Payne alternative, A6 brief-9);
+    versioned profiles; profile_version selects the set — default tkp-cbms.1,
+    'kk-1982.1' the Krumhansl-Kessler alternative);
     regions carry beats+seconds extents, mean score/margin,
     and the per-window evidence. Boundary resolution is the window grid. Set
     disambiguate_relative=true to apply the relative-major/minor tie-breaker per
@@ -609,8 +611,8 @@ def structural_keys(
     brief-8 validated it on the full Winterreise set, a Pareto improvement) or
     'most_prevalent_region' (legacy — longest summed local duration).
     profile_version selects the versioned key-profile set used for both the
-    windowed track and the global evidence (default kk-1982.1; 'tkp-cbms.1' opt-in,
-    A6 brief-9)."""
+    windowed track and the global evidence (default tkp-cbms.1; 'kk-1982.1' the
+    Krumhansl-Kessler alternative)."""
     from ..temporal import Event, Sequence, reduce_to_structural_keys, track_keys
 
     sequence = _canonical_sequence(events, bpm=float(bpm))
@@ -2183,9 +2185,9 @@ def midi_file_analysis(
     smooth_key_regions=true to absorb short, low-confidence key-region blips
     (off by default; versioned hysteresis, cited on the tracking result).
     profile_version selects the versioned key-profile set for both the global
-    induction and the per-window tracking (default kk-1982.1; 'tkp-cbms.1' the
-    opt-in Temperley-Kostka-Payne alternative — better-balanced for major keys,
-    A6 brief-9). Set include_meter_regions=true to also infer the LOCAL meter from
+    induction and the per-window tracking (default tkp-cbms.1; 'kk-1982.1' the
+    Krumhansl-Kessler alternative, better balanced when the margin is used as a
+    control signal). Set include_meter_regions=true to also infer the LOCAL meter from
     note content (off by default): "meter_regions" carries the windowed
     meter-tracking result (time-signature regions with beats+seconds extents and
     per-window evidence; null if no window carries metric information). Inferred

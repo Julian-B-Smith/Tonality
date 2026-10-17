@@ -78,7 +78,7 @@ without either one hallucinating on the other's behalf.
   up. The whole surface is exposed as tools an agent calls (below).
 - **For music software** — one audited theory core, so every synth, sequencer, and
   visualizer stops reinventing (and quietly disagreeing about) the theory. Around a
-  dozen consumer projects already share it through a versioned contract.
+  around ten consumer projects already share it through a versioned contract.
 - **For research & education** — the engine can **derive a style** from a corpus (or
   a person's playing) as an inspectable ruleset + a sampleable distribution, and
   **measure the distance** between one style and another as a number. That makes it
@@ -159,13 +159,13 @@ fully testable. Every tool returns a typed structure with a `to_dict()`: a calle
 gets JSON it can trust, with the evidence attached.
 
 **The contract is enforced, not hoped for.** A **golden conformance harness** pins
-every tool's full output (one deterministic call per tool, float-tolerant,
+every tool's full output (at least one deterministic call per tool, float-tolerant,
 language-neutral by construction); any output change fails CI until the golden is
 regenerated in the same change, so drift is always reviewable. A separate **port
 pin** fingerprints the surface a C++ re-implementation must reproduce, and a
 **freezability** test keeps the core reproducible. Empirical priors and catalogs are
-versioned JSON that ship to every implementation verbatim. (~900 tests gate the
-whole thing.)
+versioned JSON that ship to every implementation verbatim. (Over 1,200 tests gate
+the whole thing.)
 
 **The ecosystem is real and coordinated.** Around ten consumer projects — synths,
 generative sequencers, visualizers, a preference-learner, a C++ performance port —
@@ -240,7 +240,7 @@ the surface.)*
   *Horizon* section for speculative cross-project ideas. Any forward-looking claim
   (including this README) defers to it.
 - **[INTEGRATION.md](INTEGRATION.md)** — the capability schematic for consumers:
-  every shipped capability, the three doors, the contracts to design around.
+  every shipped capability, the four doors in, the contracts to design around.
 - **[CLAUDE.md](CLAUDE.md)** — contributor & agent workflow, the architecture
   layers, and the conventions.
 - **[`integrations/`](integrations/)** — the cross-project exchange channel: the

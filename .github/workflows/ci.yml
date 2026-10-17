@@ -1,6 +1,6 @@
 name: CI
 
-# Enforce the "808 green" the project already achieves locally: run the dev
+# Enforce the green suite the project already achieves locally: run the dev
 # suite (tests/) and the audit invariants (audit/checks/) on every PR and on
 # main. Catches golden drift, the port-pin fingerprint, and regressions before
 # merge — the accountability the Stop-hook gives locally, made mandatory.
@@ -39,7 +39,7 @@ jobs:
           cache: pip
       - name: Install (hash-pinned lock, then the package itself without deps)
         # The lock is universal across the matrix (env markers cover <3.11).
-        # The one MCP-server test skips without the optional `mcp` extra, exactly
+        # The two MCP-SDK tests skip without the optional `mcp` extra, exactly
         # as it does locally; the weekly upstream canary covers the server.
         run: |
           python -m pip install --require-hashes -r requirements/ci.lock

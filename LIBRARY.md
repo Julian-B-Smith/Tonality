@@ -156,3 +156,25 @@ evidence over any stored lesson).
   the audit then finds (⇒ grepping is the wrong defence, and the fix belongs in a
   shared helper or a gate instead); or a long stretch of fixes where no sibling
   recurrence appears (⇒ these two were a coincidence, and the check is overhead).
+
+### [L0006] A gate must discover its targets; a hand-kept list or an unrun doc command is a silent hole
+
+`tier: candidate` | `added: 2026-10-17` | `tags: workflow, contracts` | `supersedes: —`
+
+- **lesson:** When a check runs over "every X", derive X from the tree (glob the
+  modules, walk the TOOLS tuple, glob `examples/`), never from a list written when
+  the check was. New code lands outside a hand-kept list without anyone noticing,
+  and the check keeps passing. The same holds for a command the README tells a
+  human to run: if no test executes it, it is a claim, not a contract. The
+  `test_every_tool_has_a_conformance_case` ratchet (L0001) is the shape to copy.
+- **evidence:** Two independent holes, both found by the 2026-10-17 drift audit.
+  (1) The README's first runnable command, `examples/quickstart_engine_demo.py`,
+  crashed for months: RE-6e deleted a helper it imported, and nothing ran
+  `examples/`. Now gated by `tests/test_examples.py`, proven red on the old file.
+  (2) The path-traversal ratchet listed `rules.library` and `patterns.library`
+  by hand, so the drum-pattern loader added later in `io/loaders.py` sat outside
+  it (guarded in code by luck, not by the gate). It now scans every module, and
+  was proven red on a plant in exactly that module.
+- **falsifier:** a discovering gate that misses a target the tree does contain
+  (⇒ discovery needs its own control); or hand-kept lists that stay complete
+  across many slices (⇒ these two were incidental, not a pattern).
