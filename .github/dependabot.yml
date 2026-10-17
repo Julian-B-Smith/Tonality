@@ -3,9 +3,12 @@
 #   * github-actions — keeps the SHA pins in .github/workflows moving. A pin
 #     nobody updates is a frozen vulnerability; Dependabot rewrites the SHA and
 #     its `# vX.Y.Z` comment together.
-#   * pip on pyproject.toml — our ranges are wide (`mido>=1.3,<2`,
-#     `mcp>=1.2,<2`), so this fires essentially only on a new MAJOR outside a
-#     ceiling, which is exactly the signal gap 29 needs (mcp 2.x).
+#   * pip on pyproject.toml, with `versioning-strategy: increase-if-necessary`:
+#     a range is touched only when a release falls OUTSIDE it, so this fires
+#     on a new major past a ceiling (mcp 2.x is exactly gap 29's signal), not
+#     on every patch. The default strategy raised every floor instead
+#     (#305–#309, opened 2026-10-09 minutes after #302 merged), which the
+#     first version of this comment wrongly said would not happen.
 #
 # The hash-pinned `requirements/*.lock` files are refreshed with the command in
 # their header (`uv pip compile ...`), followed by `scripts/sbom.py`;
@@ -18,5 +21,6 @@ updates:
       interval: weekly
   - package-ecosystem: pip
     directory: /
+    versioning-strategy: increase-if-necessary
     schedule:
       interval: weekly

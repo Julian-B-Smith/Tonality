@@ -69,12 +69,20 @@ temporal/    Time layer (Phase 2): Event/Sequence + tempo/meter; window → real
              Segmentation, harmonic rhythm, local key tracking, voice identity/motion,
              melodic + rhythmic atoms.
   ↓
+context/     Display context (spelling, labels) — presentation only; analysis never
+             imports it.
+  ↓
+dataset/     The unit of record (Phase 3): DatasetRecord / Dataset integrate analysis +
+             temporal + context results; nothing below may import it. The MIDI →
+             dataset pipeline lives here (pipelines.py).
+  ↓
 patterns/    Pattern layer (Phase 4.6, gap C): sequential templates as first-class
              objects — a Pattern declares its abstraction (pitch exact/degree/contour
              × time exact/free; the identity lattice at pattern grain) and
              find_pattern matches exactly under that declaration. Patterns say what
              is CHARACTERISTIC; rules say what is forbidden/required. Named library
-             in mts/data/patterns/. Slice 1 = melody domain; harmonic schemas,
+             in mts/data/patterns/. Single-part melodic patterns and cross-part
+             schemata (e.g. the two-voice Prinner) ship; harmonic schemas,
              rule-projection, and PrefixSpan induction are recorded follow-ons.
   ↓
 rules/       Rulesets (Phase 4.6): declarative JSON rules over the atom vocabulary;
@@ -109,7 +117,10 @@ mcp/         Thin adapter (Phase 4): one tool per analysis entry point. tools.py
 
 `io/` loads catalogs from `mts/data/*.json` (inside the package, so installed
 copies work) and sits **above** `notation.py`/`session.py` so it can consume both
-without an import cycle (RE-6b untangled the old `io ↔ analysis` cycle by moving
+without an import cycle. It also holds the MIDI reader/writer (`io/midi.py`, which
+imports `temporal` to build Sequences) and the versioned-data export
+(`io/export.py`, which imports `analysis` lazily), so the diagram's `io/` line is
+the *catalog* loader's position, not the whole package's (RE-6b untangled the old `io ↔ analysis` cycle by moving
 those two modules below it). `theory/functions.py` generates functional harmony.
 `workspace.py` is a stateful session facade (one `SessionCatalog` each — keep it
 lean; it is *a* entry point, not *the* API).
@@ -144,7 +155,8 @@ There is **no bare `python`** on this machine. Use the project venv explicitly:
 
 The venv is at the **main repo root** (`~/Documents/Tonality/.venv`),
 not inside the worktree. Keep the full `tests/` suite green on every commit
-(one test needs the optional `mcp` extra and skips without it).
+(two tests need the optional `mcp` extra and skip without it; on Python 3.10
+the packaging test also skips, since it needs `tomllib`).
 
 **Reproducing CI locally** (`bash scripts/ci-local.sh`) — CI runs **two** legs,
 `pytest tests/` *and* `pytest audit/checks/`, on Python **3.10 + 3.13**. The

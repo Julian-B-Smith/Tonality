@@ -1,8 +1,9 @@
 # Tonality — Integration Summary
 
 > A capability schematic for **external projects** (synthesizers, MIDI/sound
-> generators, visualizers, agents) preparing to plug into this engine. Current
-> as of Phase 4 (2026-06). Plans referenced here live in
+> generators, visualizers, agents) preparing to plug into this engine. The
+> capability table describes what ships on `main` (re-checked against the code
+> 2026-10-17 by the docs-vs-code drift audit). Plans referenced here live in
 > [ROADMAP.md](ROADMAP.md) — the single source of truth for direction; this
 > document describes **what exists** and links phases for what doesn't yet.
 
@@ -46,17 +47,17 @@ each level unlocks more analysis.
 | **Exhaustive naming** | every valid (root, quality) reading of a pc set — symmetric/ambiguous sets yield several (C6 = Am7; dim7 names at 4 roots) |
 | **Key induction** | ranked key candidates with scores + top-two margin from **any non-negative pc-weight 12-vector** (summed durations, exponentially-decaying histograms, velocity-weighted counts — your weighting policy, our ranking) |
 | **Local key tracking** | windowed key induction over a sequence → **key regions** (beats + seconds extents, per-region mean score/margin, per-window evidence) — modulation-aware splitting and renderable overlays; window geometry caller-set and cited. Raw every-blip output by default; opt-in `smoothing=true` (`track_keys`/`key_tracking`, and `smooth_key_regions` on `midi_file_analysis`/`piano_roll_view`) applies **versioned hysteresis** (`key-smoothing.1`, cited via `smoothing_version`): a region shorter than `min_region_windows` with `mean_margin` below `min_region_margin` is absorbed into its stronger neighbour, while a confident brief modulation survives (margin override). Windows keep their raw argmax as evidence — only the grouping is smoothed. Opt-in `key_inertia=true` (on `track_keys`/`key_tracking`/`structural_keys`/`midi_file_analysis`) applies a **continuity prior** (A6 brief-13): a deterministic Viterbi over the per-window candidate scores with a flat `switch_penalty` (versioned `key-inertia.1`, cited via `inertia_version`) that rewards fit + penalizes switching, holding near-tie mode flips to their context and cutting over-segmentation; a sustained, well-fit modulation still wins (the penalty is paid once). It is a **`track_keys`-only** layer — `infer_key`'s single-vector global output is untouched (so the margin stability contract is unaffected). **Semantics (important):** `key_regions` is a **tonicization-sensitive local-fit** signal — each window reports the key its content best correlates with, so a V/V span reads as the dominant's key. This is **not** a *structural key-area* reduction (which would subsume tonicizations under the parent key); validating it frame-wise against human key-area annotations measures a category difference (Audiology brief-5). The tonicization-aware structural reduction is **`structural_keys`** (below) — use *it* for key-area comparison, the windowed track for tonicization-grain detail |
-| **Structural key-areas** | `structural_keys` reduces the windowed local track to **structural key-areas** — the tonicization-vs-modulation distinction. A brief, **diatonically-related** excursion (a V/V span) is absorbed into its parent key as a `tonicization` (recorded with its scale `degree`); a sustained/structural change is kept as a modulation. The discriminator is **relatedness AND (brevity OR return)** — the functional context `smooth_key_regions` (confidence-gating) lacks, since a tonicization can be a *confident* window. Output: `areas` (each with its `tonicizations` + home key), carrying the underlying `tracking` + global key as evidence; the home key is the **most-prevalent local region** (not the averaging global induction). Thresholds are a versioned prior (`structural-key.1`, theory-set, cited). A derived reduction — never overrides. Slice 1 is whole-sequence; diatonic relatedness (chromatic tonicizations + local change-point deferred) |
+| **Structural key-areas** | `structural_keys` reduces the windowed local track to **structural key-areas** — the tonicization-vs-modulation distinction. A brief, **diatonically-related** excursion (a V/V span) is absorbed into its parent key as a `tonicization` (recorded with its scale `degree`); a sustained/structural change is kept as a modulation. The discriminator is **brief OR (related AND returns)** (revised from "related AND (brief OR returns)" with A6 brief-11, so a brief *unrelated* excursion is a chromatic tonicization too) — the functional context `smooth_key_regions` (confidence-gating) lacks, since a tonicization can be a *confident* window. Output: `areas` (each with its `tonicizations` + home key), carrying the underlying `tracking` + global key as evidence; the home key is the **most-prevalent local region** (not the averaging global induction). Thresholds are a versioned prior (`structural-key.2` today, theory-set, cited via `prior_version`). A derived reduction — never overrides. Whole-sequence; local change-point detection is deferred |
 | **Meter estimation** | infer the time signature from note content (`meter_estimation`) — ranked candidate signatures with scores + margin (Decision 7), each scored by **bar-period autocorrelation × metric-profile correlation** (distinguishes e.g. 3/4 from 6/8, which share a 3-beat bar). Templates are a **versioned prior** (`meter-grid.1`, cited); both sub-scores ride along as evidence. **Never overrides the file's meter** — `declared_numerator`/`declared_denominator` carry the file's claim and `agrees_with_declared` evidences against it (the `MeterMap` is untouched). Velocity (event index 3) weights the accent; raises on too few onsets / no metric information. Opt-in `phase_search=true` scores each candidate's profile at its best bar phase (off by default → the global phase-0 contract + golden are unchanged) — needed when the downbeat isn't at beat 0 — and **reports** that winning phase as `downbeat_offset_beats` (None when off; the tracker surfaces it per window + per region): geometric anacrusis estimation, not corpus-fit. **Local meter tracking** is the windowed form (`meter_tracking` / `track_meter`, as `key_tracking` is to `key_induction`): a window slides over the sequence, each ranked with the same prior + per-window phase search, consecutive same-meter windows merging into **meter regions** (beats+seconds extents, mean score/margin, per-window evidence); uninformative windows make no claim. Reachable on a real SMF via `midi_file_analysis(include_meter_regions=true)`, inferred independent of the file's declared `MeterMap` — compare them to catch a mis-tagged or changing meter. Raw per-window argmax, no smoothing in v1 (a 1-window transient at a change boundary is honest — gate on `window_count`/`mean_margin`) |
 | **Relative-key tie-breaker** | additive refinement that disambiguates relative major/minor (`relative_key`) — the pair shares a diatonic collection, so KK correlation separates them weakly. Tonal-hierarchy signals (leading-tone = the minor's raised 7th, outside the shared collection; tonic-triad + tonic salience) choose between the pair, evidenced + versioned (`rel-key.1`). **`key_induction` is unchanged** (its scores/margin stay a pinned stability contract) and carried in the result as `induction`; `applied=false` when the top key and its relative partner aren't a near-tie (nothing to second-guess), `is_ambiguous` flags an honestly inconclusive break. Positive `tiebreak_score` favors minor. **Wired into the pipeline (opt-in, off by default):** `key_tracking`, `midi_file_analysis`, and `piano_roll_view` all take `disambiguate_relative[_keys]` to apply it per window/region (and to the global key context); cited on the tracking result, the global break surfaced under `key_disambiguation` |
 | **Contextual disambiguation** | *the* chosen reading in a key, with ranked alternatives and per-signal evidence; flags aug-6ths, secondary dominants, Neapolitans; honest `is_ambiguous` |
 | **Cadence detection** | cadential formulas in a named progression (`cadences`): authentic / plagal / deceptive / half, each an evidenced event with approach+arrival roman/role/degree, root motion, and per-signal evidence. Formulas (not phrase-confirmed) — `is_final` is the strongest signal; major/minor only (`mode_supported` flag) |
 | **Next-chord recommendation** | ranked candidate next chords from a current chord in a key (`next_chord`), each **tagged** with succession context — functional (`dominant_resolution`, `descending_fifth`, `prolongation`, `retrogression`, `applied_dominant`, `borrowed`, + the cadential formula), voice-leading (`smooth`, `parsimonious` with P/L/R detail, `chromatic_mediant`, common-tone count), and a reported-but-unscored `color_shift` (DFT delta). Plural + evidenced (Decision 7); scoring weights are a **versioned prior** (`succession.1`, cited), and every candidate exposes raw axes (`vl_distance`, `common_tones`, `root_interval`, `color_shift`) so you can re-rank. `tag_transition` annotates a single transition (incl. out-of-vocabulary chords). Major/minor only; the per-style *historical/corpus* tags are a planned follow-on (ROADMAP gap 14) |
 | **Voice-leading distance** | exact minimal motion between two chord identities + the optimal voice mapping; **register-aware form** for voiced chords (actual MIDI notes — octaves cost 12, doublings are voices) via `voice_leading_realized` |
-| **Voice identity & pair motion** | `Event.voice` part labels (MIDI seeds one voice per track/channel as `t{n}c{n}`); `voice_motion` classifies every voice-pair transition — parallel / similar / contrary / oblique with mod-12 interval classes as evidence. Counterpoint predicates are one-line filters (parallel fifths = `parallel` + `interval_class 7`) |
-| **Melodic atoms** | per-note approach/departure intervals with step/skip/leap classes, Parsons contour, ambitus (`analyze_melody`); **NHT typing** (passing, neighbor, appoggiatura, escape, suspension, anticipation, pedal) against caller-provided harmony spans — no harmony, no claim |
-| **Rhythmic atoms** | per-note metric placement (downbeat / beat / offbeat / subdivision) against the felt beat (compound meters beat in threes), a precise **syncopation** predicate (weak onset sounding through the next stronger grid line), durations + inter-onset intervals (`analyze_rhythm`) |
-| **Swing feel** | straight / swung / reversed / mixed from two-way beat divisions, with the division-fraction evidence and ratio (2/3 → 2:1 triplet swing, 0.75 → 3:1 shuffle); thresholds are a **versioned prior** (`swing-feel.1`, cited). Only reads swing encoded in the onsets — quantized-straight MIDI carries none (`analyze_swing`) |
+| **Voice identity & pair motion** | `Event.voice` part labels (MIDI seeds one voice per track/channel as `t{n}c{n}`); `voice_motion` (MCP tool `voice_pair_motion`) classifies every voice-pair transition — parallel / similar / contrary / oblique with mod-12 interval classes as evidence. Counterpoint predicates are one-line filters (parallel fifths = `parallel` + `interval_class 7`) |
+| **Melodic atoms** | per-note approach/departure intervals with step/skip/leap classes, Parsons contour, ambitus (`analyze_melody`; MCP tool `melodic_analysis`); **NHT typing** (passing, neighbor, appoggiatura, escape, suspension, anticipation, pedal) against caller-provided harmony spans — no harmony, no claim |
+| **Rhythmic atoms** | per-note metric placement (downbeat / beat / offbeat / subdivision) against the felt beat (compound meters beat in threes), a precise **syncopation** predicate (weak onset sounding through the next stronger grid line), durations + inter-onset intervals (`analyze_rhythm`; MCP tool `rhythmic_analysis`) |
+| **Swing feel** | straight / swung / reversed / mixed from two-way beat divisions, with the division-fraction evidence and ratio (2/3 → 2:1 triplet swing, 0.75 → 3:1 shuffle); thresholds are a **versioned prior** (`swing-feel.1`, cited). Only reads swing encoded in the onsets — quantized-straight MIDI carries none (`analyze_swing`; MCP tool `swing_analysis`) |
 | **Groove extract / apply** | `extract_groove` distils a **GrooveTemplate** from a played loop — per grid slot (at a caller-set base resolution), the signed onset offset (fraction of the grid unit) + velocity accent (deviation from the loop mean), cycled over the loop; quantized input → **null groove** (the swing honesty bound, generalized; polyphony shares a slot). `apply_groove` (generative) re-times a sequence toward a template with Live Groove Pool parameters — **Base / Quantize / Timing / Random / Velocity / Amount** — onsets shift, durations preserved, `Random` requires an explicit seed (reproducible jitter). Templates JSON-round-trip; the write-back loop closes via MIDI export |
 | **Rulesets (DSL) + conformance evaluator** | declarative JSON rules over the atom vocabulary (voice motion / melody / rhythm): `where`-filtered `forbid`/`require`, hard or soft-weighted. Strict total validation (`validate_ruleset` returns *every* error — built for LLM-translated rulesets); `evaluate_ruleset` → per-rule violations with locations + atom evidence, conformance frequencies, hard/soft rollups. Rules the material can't ground come back `applicable: false` with the reason — never silently skipped |
 | **Ruleset composition + comparison** | rulesets compose and compare as data: `combine_rulesets` (union, dedup identical, conflict on divergent same-id), `specialize_ruleset` (overlay overrides base + reports overridden/added — "style = base + overrides"), `compare_rulesets` (shared / conflicting / unique ids + directly-contradictory rule pairs). Deterministic, no evaluation |
@@ -256,7 +257,7 @@ APIs are whole-sequence (batch), not incremental — see "Coming" below.
   contract, either side of the wire. Swing/groove material is the exception
   that *should* keep its encoded offsets — see the swing row's caveat.
 - **Key candidates span the loaded profile modes** — major and minor under
-  `kk-1982.1`. Modal material (a dorian vamp) will rank as its relative
+  both shipped profiles (`tkp-cbms.1`, the default, and `kk-1982.1`). Modal material (a dorian vamp) will rank as its relative
   major/minor rather than its modal tonic; modal profile rows join the
   standing Temperley/Aarden invitation if you need modal centers ranked.
 - **Numeric core, spelling at the edge.** Analysis results are pitch-class
@@ -269,38 +270,26 @@ APIs are whole-sequence (batch), not incremental — see "Coming" below.
 
 ## Coming (prepare for, don't depend on yet — phases in ROADMAP.md)
 
-- **Cadence detection as evidenced events** (gap 7) — V–I and related
-  root-motion patterns as discrete, evidence-carrying events. Consumers:
-  TERRANE home-center impulses, A1, A4.
-- **Representation layer** (Phase 5) — *for visualizers*: typed, render-
-  agnostic descriptions of clock/bracelet diagrams, Tonnetz, circle of
-  fifths, piano-roll/keyboard views, each declaring the input it requires.
-  Plan to consume structured description data, not pixels.
+Cadence detection, the representation layer, rulesets and scale re-mapping used
+to be listed here; all of them ship now (see the capability table). What is
+still genuinely ahead:
+
 - **Generative voice-leading realization** (Phase 7) — *for generators*:
-  progression → concrete voicings with parameterized smoothness/contour/
-  register, plus scale re-mapping, meter re-mapping, modulation path
-  planning, instrument-class profiles.
+  progression → concrete voicings with parameterized smoothness, contour and
+  register; meter re-mapping; modulation path planning; instrument-class
+  profiles (gap 3). Shipped already, and usable today: voicing enumeration
+  (`search_voicings`), the scale operations (`conform_to_scale`,
+  `remap_by_degree`, `retonicize`) and the plan-based `modal_transform`.
 - **Live/streaming + incremental APIs** (A4 gaps) — *for real-time tools*:
   today's APIs are batch; rolling/incremental forms are recorded, not built.
   Real-time integrators: design a clean event boundary now (note on/off with
   timestamps) so a streaming adapter can slot in later, and prefer pull-based
   queries against the batch API in the interim (it is fast enough to re-query
   per phrase, just not per note).
-- **Compositional rulesets** (Phase 4.6 / Decision 8) — *for everyone,
-  eventually the biggest one*: a declarative, JSON-serializable constraint
-  syntax over the engine's analytical vocabulary. Rulesets will be
-  first-class versioned artifacts flowing in both directions: **impose** one
-  on generation or analysis (conformance reports with violation locations),
-  **derive** candidate rulesets from existing material (a narrowable
-  rule-space), and **compare** rulesets (shared rules, conflicts, empirical
-  profiles). An LLM can translate a theory text into the DSL through MCP;
-  the engine validates and evaluates it exactly. *What to anticipate:*
-  generators — a ruleset becomes the "style" parameter, and your output can
-  be checked against one; analyzers/visualizers — conformance reports are a
-  new renderable result type; all projects — rulesets are JSON artifacts you
-  can store, version, and trade between projects like patches. The
-  supporting vocabulary expansion (voice identity, melodic contour,
-  rhythmic patterns) is recorded alongside it.
+- **A 1.0 stability line** (ROADMAP gap 34, *proposed* 2026-10-17, not yet
+  ratified) — stability tiers on every tool, frozen stable signatures, and
+  additive-only result JSON. Until it lands, every surface may still change;
+  pin prior versions explicitly where you depend on numbers.
 
 ## What to send back (per candidate project)
 

@@ -13,11 +13,20 @@ Two bounds, both deliberately far above any real piece and far below harm:
 
 - ``MAX_SPAN_BEATS`` — the longest sequence the engine accepts. The longest
   fixture in the repo (a full Schubert song) spans 273 beats; a four-hour piece
-  at 240 bpm is 57,600. Measured cost at 100,000 beats: ~44 MB, ~0.2 s.
+  at 240 bpm is 57,600. Building a 100,000-beat sequence is cheap; analysing
+  one is not. Key tracking over one 100,000-beat event costs about 3.6 s of CPU
+  and about 260 MB (measured 2026-10-17 by the independent security review; an
+  earlier "~0.2 s" figure timed only the construction).
 - ``MAX_GRID_CELLS`` — the most cells any single grid may have. The span bound
   alone is not enough: a tiny ``hop_beats`` or a huge ``subdivisions`` grows the
   grid without moving the span. 100,000 covers a four-hour piece at four chords
   per bar with headroom.
+
+These bounds stop RUNAWAY ALLOCATION. They are not a work budget: a grid inside
+its cell limit can still be slow when each cell is expensive. Windows × events,
+pairwise label combinatorics, MIDI event counts and the exponential realized
+voice-leading search are all unbudgeted today (ROADMAP gap 27, P0.3, opened
+2026-10-17).
 
 These are POLICY values, like the inertia λ of Decision 14: stated, cited in the
 error, and changed by review — never discovered, never silently clamped. An

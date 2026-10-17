@@ -22,7 +22,8 @@ Two gates:
    the bare words *never/always*, which this codebase uses constantly and
    legitimately to describe engine behaviour ("never guessed", "never a
    verdict"). Calibrated: the targeted set flags **0** of the current tools, while
-   a naive ``never|always`` check would wrongly flag 14 — a lint that cries wolf
+   a naive ``never|always`` check would wrongly flag 14 (2026-07-29; 24 by
+   2026-10-17, as the surface grew) — a lint that cries wolf
    gets disabled, so it is scoped to the real signal.
 
 Intended friction, stated plainly: an intentional docstring edit now requires a

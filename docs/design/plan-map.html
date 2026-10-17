@@ -1,0 +1,1756 @@
+<!doctype html>
+<!-- plan-map — Tonality's plan of record, drawn. 2026-10-17, Tonality resident session (Opus 5.5), at
+     Julian's request: "make something like [horde's docs/design/h2-plan-map.html] for Tonality".
+     Modelled on horde's map; the 1.0 target it draws toward is PROPOSED in docs/design/1.0-PLAN.md and
+     is not ratified until Julian says so.
+
+     WHAT THIS PAGE IS. One node per part of the engine's plan, one edge per dependency (prerequisite ->
+     dependent), colour by status, the critical path to the proposed 1.0 highlighted. Clicking a node shows
+     what the part is, its status, what it needs and unblocks, and the human's open decisions, plus the
+     governing ROADMAP entries READ LIVE from ROADMAP.md (gap titles; phase headings). ROADMAP.md is the
+     single source of truth for direction: this page is a view of it, never a second copy of task state.
+
+     THE DATA (the JSON script block with id "plan-data") is written by hand from the
+     ROADMAP entries and Decisions it cites. Citations: G<n> = ROADMAP gap n, P<id> = "### Phase <id>",
+     D<n> = DECISIONS.md entry n. An edge whose basis is not a citation is the plan's INFERENCE and is
+     drawn dashed. docs/design/1.0-PLAN.md carries the same parts table.
+
+     TWO ENFORCEMENT LAYERS for the same checks:
+       * tests/test_plan_map.py reads the JSON block and runs them in the dev suite (Layer-0, blocking),
+         each with a planted must-fail control. That is the gate.
+       * the "run self-check" button runs them in the browser (needs the repo served, e.g.
+         `python3 -m http.server` at the repo root, then /docs/design/plan-map.html). Opened as a file,
+         the live-file checks report SKIP, never a pass.
+     Checks: 1 citations exist · 2 acyclic · 3 references + status vocabulary · 4 map == 1.0-PLAN.md parts
+     table · 5 the critical path is a real chain ending at v1 and none longer exists · 6 every 1.0 promise
+     names real parts.
+
+     URL: ?theme=dark|light · ?check=1 · ?node=<id>. Nothing is stored; nothing reads a clock. -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tonality plan map</title>
+<style>
+  :root {
+    --bg:#EEF1F4; --panel:#FFFFFF; --well:#F7F9FB; --sunk:#E3E8EE;
+    --ink:#132130; --t2:#44566B; --dim:#7F8EA0; --rule:#D3DBE4; --hair:#E6EBF0;
+    --accent:#C23A4E; --accent-soft:rgba(194,58,78,.14); --link:#2F5FB0;
+    --s-shipped:#2C8650; --s-prog:#14899A; --s-ruled:#6750C9; --s-planned:#C98300;
+    --s-recorded:#9A6B4F; --s-post:#8C98A6; --s-parked:#B8C1CB;
+    --ok:#2C8650; --bad:#C23A4E; --skip:#9A6A00;
+    --focus:0 0 0 3px rgba(47,95,176,.35); --radius:8px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#0E141A; --panel:#151E27; --well:#111920; --sunk:#1D2834;
+    --ink:#E4EBF2; --t2:#A7B5C4; --dim:#6E7E8F; --rule:#273443; --hair:#1F2A36;
+    --accent:#FF6F82; --accent-soft:rgba(255,111,130,.16); --link:#8DB4FF;
+    --s-shipped:#5BD08A; --s-prog:#45CFDF; --s-ruled:#A795FF; --s-planned:#F2B23E;
+    --s-recorded:#D29A78; --s-post:#77869A; --s-parked:#3E4B59;
+    --ok:#5BD08A; --bad:#FF6F82; --skip:#F2B23E; --focus:0 0 0 3px rgba(141,180,255,.4); } }
+  :root[data-theme="dark"] {
+    --bg:#0E141A; --panel:#151E27; --well:#111920; --sunk:#1D2834;
+    --ink:#E4EBF2; --t2:#A7B5C4; --dim:#6E7E8F; --rule:#273443; --hair:#1F2A36;
+    --accent:#FF6F82; --accent-soft:rgba(255,111,130,.16); --link:#8DB4FF;
+    --s-shipped:#5BD08A; --s-prog:#45CFDF; --s-ruled:#A795FF; --s-planned:#F2B23E;
+    --s-recorded:#D29A78; --s-post:#77869A; --s-parked:#3E4B59;
+    --ok:#5BD08A; --bad:#FF6F82; --skip:#F2B23E; --focus:0 0 0 3px rgba(141,180,255,.4); }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); padding:20px 16px 40px;
+         font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  code, .mono, svg text, .chk { font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
+  .wrap { max-width:1500px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+  header { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:flex-end; }
+  h1 { font-size:30px; line-height:1.05; letter-spacing:-.02em; font-weight:750; text-wrap:balance; }
+  h1 .pc { font-family:ui-monospace,Menlo,monospace; font-weight:500; color:var(--accent); letter-spacing:0; }
+  .sub { color:var(--t2); max-width:70ch; margin-top:6px; }
+  .hdrctl { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  button { font:inherit; font-size:13px; color:var(--ink); background:var(--panel); border:1px solid var(--rule);
+           border-radius:999px; padding:6px 14px; cursor:pointer; min-height:34px; }
+  button:hover { border-color:var(--t2); }
+  button:focus-visible, [tabindex]:focus-visible, .nchip:focus-visible { outline:none; box-shadow:var(--focus); }
+  .flag { display:inline-block; font-size:11px; font-weight:650; letter-spacing:.06em; text-transform:uppercase;
+          padding:2px 8px; border-radius:4px; background:var(--accent-soft); color:var(--accent); margin-right:6px; }
+  .card { background:var(--panel); border:1px solid var(--rule); border-radius:var(--radius); padding:14px 16px; }
+  .card h2 { font-size:16px; font-weight:700; margin-bottom:8px; text-wrap:balance; }
+  .card > p { color:var(--t2); max-width:80ch; }
+  .note { color:var(--dim); font-size:12.5px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; font-size:12.5px; color:var(--t2); }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--sc); }
+  .ln { display:inline-block; width:26px; border-top:2px solid var(--dim); vertical-align:4px; margin-right:6px; }
+  .ln.inf { border-top-style:dashed; } .ln.crit { border-top:3px solid var(--accent); }
+  .main { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:14px; align-items:start; }
+  .canvas { overflow-x:auto; background:var(--panel); border:1px solid var(--rule); border-radius:var(--radius); }
+  .n rect.box { fill:var(--well); stroke:var(--rule); stroke-width:1.2; }
+  .n:hover rect.box { fill:var(--sunk); }
+  .n.crit rect.box { stroke:var(--accent); stroke-width:2.4; }
+  .n.open1 rect.box { stroke-dasharray:4 3; }
+  .n.sel rect.box { fill:var(--sunk); stroke:var(--ink); stroke-width:2.4; }
+  .n.dimmed { opacity:.25; } .n { cursor:pointer; }
+  .n text.nm { fill:var(--ink); font-size:11px; font-weight:650; }
+  .n text.st { fill:var(--t2); font-size:9.5px; letter-spacing:.05em; }
+  path.e { fill:none; stroke:var(--dim); stroke-width:1.1; opacity:.8; }
+  path.e.inf { stroke-dasharray:4 3; }
+  path.e.tosink { opacity:.22; }
+  path.e.crit { stroke:var(--accent); stroke-width:2.8; opacity:1; }
+  path.e.hl { stroke:var(--ink); stroke-width:1.8; opacity:1; }
+  path.e.dimmed { opacity:.1; }
+  .lane { stroke:var(--rule); stroke-dasharray:6 5; }
+  .lanelbl { fill:var(--dim); font-size:10px; letter-spacing:.12em; }
+  .side { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; }
+  .side h3 { font-size:17px; line-height:1.25; margin-bottom:6px; text-wrap:balance; }
+  .side h4 { font-size:11px; font-weight:650; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin:14px 0 4px; }
+  .side p, .side li { color:var(--t2); font-size:13px; }
+  .side ul { padding-left:18px; display:flex; flex-direction:column; gap:3px; }
+  .stag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+          padding:2px 8px; border-radius:4px; background:var(--sc); color:#0E141A; }
+  .cite { border-left:3px solid var(--rule); padding:3px 0 3px 9px; margin:5px 0; font-size:13px; color:var(--t2); }
+  .cite b { color:var(--ink); font-family:ui-monospace,Menlo,monospace; font-size:12px; margin-right:4px; }
+  .cite.missing { border-left-color:var(--bad); }
+  a.nd { color:var(--link); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .chain { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .chain .arr { color:var(--accent); font-weight:800; }
+  .nchip { font-size:12px; padding:1px 8px; border-radius:4px; background:var(--sc); color:#0E141A; cursor:pointer;
+           border:0; min-height:0; font-family:ui-monospace,Menlo,monospace; }
+  .grid-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:10px; }
+  .stage { background:var(--well); border:1px solid var(--hair); border-radius:6px; padding:10px 12px;
+           display:flex; flex-direction:column; gap:6px; }
+  .stage .k { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+  .stage h4 { font-size:14px; } .stage p { font-size:13px; color:var(--t2); }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; }
+  .tbl { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th { text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);
+       font-weight:650; padding:6px 10px 6px 0; border-bottom:1px solid var(--rule); }
+  td { padding:7px 10px 7px 0; border-bottom:1px solid var(--hair); vertical-align:top; color:var(--t2); }
+  td:first-child { color:var(--ink); font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap; }
+  .pst { font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:1px 7px; border-radius:4px; white-space:nowrap; }
+  .pst.met { background:color-mix(in srgb,var(--ok) 20%,transparent); color:var(--ok); }
+  .pst.partial { background:color-mix(in srgb,var(--skip) 22%,transparent); color:var(--skip); }
+  .pst.open { background:var(--accent-soft); color:var(--accent); }
+  .lvl { font-size:11px; font-weight:700; color:var(--ink); }
+  .chk .r { display:grid; grid-template-columns:120px 1fr; gap:10px; padding:5px 0; border-bottom:1px solid var(--hair); font-size:12.5px; }
+  .ok { color:var(--ok); font-weight:700; } .bad { color:var(--bad); font-weight:700; } .skip { color:var(--skip); font-weight:700; }
+  .verdict { font-size:14px; font-weight:750; margin-bottom:6px; }
+  @media (max-width:1100px) { .main { grid-template-columns:1fr; } .side { position:static; max-height:none; } }
+  /* opacity only: nodes are re-created on every redraw, and an SVG rect starts black, so a fill transition flashes. */
+  @media (prefers-reduced-motion: no-preference) { .n, path.e { transition:opacity .15s; } }
+</style></head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Tonality <span class="pc">{0,4,7}</span> plan map</h1>
+    <p class="sub"><span class="flag">1.0 proposed</span>The plan of record, drawn: every part of the engine, its status, what it needs first, and the path to a proposed 1.0. Entries are read live from ROADMAP.md when the repo is served.</p>
+  </div>
+  <div class="hdrctl">
+    <button id="themeBtn" type="button">Theme: auto</button>
+    <button id="checkBtn" type="button">Run self-check</button>
+  </div>
+</header>
+
+<section class="card">
+  <div class="legend" id="legend"></div>
+  <p class="note" id="srcNote" style="margin-top:8px"></p>
+</section>
+
+<div class="main">
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <div class="canvas" id="canvas" role="img" aria-label="Dependency graph of the plan"></div>
+    <section class="card">
+      <h2>Critical path to 1.0</h2>
+      <div class="chain" id="critList"></div>
+      <p class="note" style="margin-top:8px">The longest chain of prerequisites among the parts 1.0 needs, ending at <code>v1</code>. Computed from the data on every load, never typed. Parts whose 1.0 membership is open (dashed outline) are left out.</p>
+    </section>
+    <section class="card">
+      <h2>What 1.0 promises</h2>
+      <p class="note" style="margin-bottom:8px">Each promise is verified by a gate, never by judgement. Status is what holds on <code>main</code> today. Defined in <code>docs/design/1.0-PLAN.md</code>, which outranks this table; ROADMAP.md outranks both.</p>
+      <div class="tbl"><table><thead><tr><th>#</th><th>Promise</th><th>Level</th><th>Verified by</th><th>Today</th><th>Parts</th></tr></thead><tbody id="promises"></tbody></table></div>
+    </section>
+    <section class="card">
+      <h2>Order of work (proposed)</h2>
+      <p class="note" style="margin-bottom:8px">The graph's edges are completion dependencies. The stages below are a proposed sequence of slices, which Julian may reorder.</p>
+      <div class="grid-cards" id="order"></div>
+    </section>
+    <section class="card" id="checkCard" hidden>
+      <h2>Self-check</h2>
+      <div class="chk" id="checkOut"></div>
+    </section>
+  </div>
+  <aside class="card side" id="side" aria-live="polite"></aside>
+</div>
+</div>
+
+<script type="application/json" id="plan-data">
+{
+ "asOf": "2026-10-17",
+ "records": "ROADMAP on main 5a7cf57 plus gap 34 and review pass #2 (this branch); DECISIONS through 18",
+ "groups": [
+  "identity",
+  "time",
+  "context",
+  "pipeline",
+  "rules",
+  "generative",
+  "views",
+  "doors",
+  "quality",
+  "release",
+  "milestone"
+ ],
+ "nodes": [
+  {
+   "id": "identity",
+   "name": "Identity + catalogue",
+   "group": "identity",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P1",
+    "P1.5",
+    "P3.5",
+    "G8",
+    "G33"
+   ],
+   "deps": [],
+   "what": "The timeless core: 12-bit pitch-class identity, set-class data (prime form, interval vector, DFT, chirality), exhaustive naming, contextual naming in a key, catalogue containment, scale naming, and the unmatched-naming fallback.",
+   "note": "Shipped across Phases 1, 1.5 and 3.5; containment (gap 8) and the no-empty-shell fallback (gap 33) delivered. Phase 1.5 still lists open vocabulary items.",
+   "decisions": [
+    "Gap 8: the scale-name corpus licence"
+   ]
+  },
+  {
+   "id": "time",
+   "name": "Time layer + MIDI I/O",
+   "group": "time",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P2",
+    "G1",
+    "G12"
+   ],
+   "deps": [],
+   "what": "Events and sequences with tempo and meter maps; Standard MIDI File read and write; opt-in coalescing of performed timing.",
+   "note": "Phase 2 done; MIDI export (gap 1) and performed-input tolerance (gap 12) shipped. Live input is descoped (see live).",
+   "decisions": []
+  },
+  {
+   "id": "keys",
+   "name": "Key induction + tracking",
+   "group": "context",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P3.5",
+    "G13"
+   ],
+   "deps": [
+    [
+     "identity",
+     "P3.5"
+    ],
+    [
+     "time",
+     "P3.5"
+    ]
+   ],
+   "what": "Ranked key induction from any pc-weight vector under versioned profiles; windowed local key tracking with opt-in smoothing, continuity prior and the relative-key tie-breaker; per-region naming context.",
+   "note": "Shipped; per-region context in the A1 pipeline delivered (gap 13).",
+   "decisions": []
+  },
+  {
+   "id": "structural",
+   "name": "Structural keys + chromatic events",
+   "group": "context",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "G7",
+    "G25"
+   ],
+   "deps": [
+    [
+     "keys",
+     "G25"
+    ]
+   ],
+   "what": "Tonicization versus modulation (structural key areas), cadence detection and per-area confirmation, and the chromatic-event classifier that refuses a single label inside its contested band.",
+   "note": "Cadences (gap 7) and chromatic-event classification (gap 25, slices 1–2) shipped. Gap 25 notes its real fix waits on gap 22's plural chord hearing.",
+   "decisions": []
+  },
+  {
+   "id": "meter",
+   "name": "Meter estimation + tracking",
+   "group": "context",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "G11"
+   ],
+   "deps": [
+    [
+     "time",
+     "G11"
+    ]
+   ],
+   "what": "Ranked time-signature estimation that evidences against, never overrides, the file's declared meter; downbeat phase; windowed local meter tracking.",
+   "note": "Global estimation, change-point tracking and anacrusis phase delivered (gap 11); only refinements remain deferred.",
+   "decisions": []
+  },
+  {
+   "id": "atoms",
+   "name": "Melodic, rhythmic + part atoms",
+   "group": "time",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P2",
+    "G28",
+    "G31"
+   ],
+   "deps": [
+    [
+     "time",
+     "P2"
+    ]
+   ],
+   "what": "Per-note melodic and rhythmic atoms, voice-pair motion, swing, part profiles and relations, scale-walk detection, and GM-percussion roles with named drum patterns.",
+   "note": "Shipped; drum patterns (gap 28) and scale-run detection (gap 31b) delivered.",
+   "decisions": []
+  },
+  {
+   "id": "dataset",
+   "name": "MIDI → dataset pipeline",
+   "group": "pipeline",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P3",
+    "G13"
+   ],
+   "deps": [
+    [
+     "keys",
+     "G13"
+    ],
+    [
+     "identity",
+     "P3"
+    ]
+   ],
+   "what": "SMF → events → stable-harmony segments → inferred key → enriched per-segment records, with opt-in local-key conditioning and meter regions.",
+   "note": "Phase 3 done; the A1 key-aware analyzer is served end to end.",
+   "decisions": []
+  },
+  {
+   "id": "rules",
+   "name": "Ruleset DSL + evaluator",
+   "group": "rules",
+   "status": "in progress",
+   "in1": "yes",
+   "cites": [
+    "P4.6",
+    "G20",
+    "G23"
+   ],
+   "deps": [
+    [
+     "atoms",
+     "P4.6"
+    ]
+   ],
+   "what": "Declarative JSON rules over the atom vocabulary: total validation, conformance evaluation, combine/specialize/diff, field manifest, named libraries, budget rules and rule induction.",
+   "note": "The DSL, evaluator, composition, budget rules (gap 23) and preference hooks (gap 20) shipped; Phase 4.6 still lists later slices. The 1.0 plan proposes the DSL stable and induction experimental.",
+   "decisions": []
+  },
+  {
+   "id": "patterns",
+   "name": "Pattern layer",
+   "group": "rules",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P4.6"
+   ],
+   "deps": [
+    [
+     "atoms",
+     "P4.6"
+    ]
+   ],
+   "what": "Sequential templates as data, each declaring its pitch × time abstraction; exact single-part and cross-part matching; a citable library.",
+   "note": "Shipped (gap C slice 1 and the cross-part schemata).",
+   "decisions": []
+  },
+  {
+   "id": "succession",
+   "name": "Next-chord + melodic tendency",
+   "group": "rules",
+   "status": "in progress",
+   "in1": "yes",
+   "cites": [
+    "G14",
+    "G19",
+    "P4.5"
+   ],
+   "deps": [
+    [
+     "keys",
+     "G14"
+    ],
+    [
+     "structural",
+     "G14"
+    ]
+   ],
+   "what": "Ranked, tagged next-chord candidates under a versioned scoring prior, transition tagging, and the melodic-tendency prior (where a pitch wants to go).",
+   "note": "Slices shipped (gaps 14 and 19); per-style corpus priors are still to derive. The 1.0 plan proposes the axes and tags stable, the ranking provisional.",
+   "decisions": []
+  },
+  {
+   "id": "style",
+   "name": "Statistical style",
+   "group": "rules",
+   "status": "in progress",
+   "in1": "open",
+   "cites": [
+    "P4.5",
+    "G14"
+   ],
+   "deps": [
+    [
+     "succession",
+     "G14"
+    ]
+   ],
+   "what": "Chord-stream transition matrices, held-out cross-entropy and the style-profile object.",
+   "note": "Shipped as slices of gap 14 and Phase 4.5. Proposed experimental at 1.0: the meaning of cross-entropy depends on smoothing and alphabet, and the profile has no named consumer.",
+   "decisions": [
+    "Tier for 1.0: experimental (proposed) or provisional"
+   ]
+  },
+  {
+   "id": "search",
+   "name": "Inverse search + voicing enumeration",
+   "group": "generative",
+   "status": "in progress",
+   "in1": "yes",
+   "cites": [
+    "P4",
+    "G17"
+   ],
+   "deps": [
+    [
+     "identity",
+     "P4"
+    ],
+    [
+     "rules",
+     "P4"
+    ]
+   ],
+   "what": "Exhaustive inverse queries over the 4,096 identities and bounded register spaces, using the rules predicate pointed the other way; voicing enumeration needs an explicit register window.",
+   "note": "search_identities and search_voicings shipped (gap 17 slice 1); slice 2 (ranking) open.",
+   "decisions": []
+  },
+  {
+   "id": "scaleops",
+   "name": "Scale operations",
+   "group": "generative",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "G26",
+    "G31",
+    "P7"
+   ],
+   "deps": [
+    [
+     "identity",
+     "G26"
+    ],
+    [
+     "time",
+     "G26"
+    ]
+   ],
+   "what": "conform (snap by proximity), remap by degree (bijective translation), retonicize (zero-edit renaming): three different acts kept distinct by intent.",
+   "note": "Shipped; the conform-vs-remap routing (gap 31a) adopted by Tonality-Live.",
+   "decisions": []
+  },
+  {
+   "id": "modal",
+   "name": "Modal transform (plan → apply)",
+   "group": "generative",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "G26"
+   ],
+   "deps": [
+    [
+     "structural",
+     "G26"
+    ],
+    [
+     "scaleops",
+     "G26"
+    ]
+   ],
+   "what": "Analyze → plan → apply over the key-area timeline: the plan is an inspectable, versioned, serializable artifact and applying it is a pure function of the plan.",
+   "note": "Delivered and feature-complete for Audiology's start signal (gap 26); refinements listed in the entry.",
+   "decisions": []
+  },
+  {
+   "id": "repair",
+   "name": "Ruleset repair + groove",
+   "group": "generative",
+   "status": "shipped",
+   "in1": "open",
+   "cites": [
+    "G10",
+    "P4.6"
+   ],
+   "deps": [
+    [
+     "rules",
+     "P4.6"
+    ],
+    [
+     "atoms",
+     "G10"
+    ]
+   ],
+   "what": "Minimal-edit conformance repair against a ruleset; groove extract (analysis) and apply (generative, seeded).",
+   "note": "Shipped (gap 10). Proposed experimental at 1.0 until they are rebuilt as plan producers with a stated cost model.",
+   "decisions": [
+    "Tier for 1.0: experimental (proposed)"
+   ]
+  },
+  {
+   "id": "views",
+   "name": "Representation descriptors",
+   "group": "views",
+   "status": "in progress",
+   "in1": "yes",
+   "cites": [
+    "P5"
+   ],
+   "deps": [
+    [
+     "identity",
+     "P5"
+    ],
+    [
+     "dataset",
+     "P5"
+    ]
+   ],
+   "what": "Render-agnostic numeric descriptors: keyboard, piano roll, bracelet, Tonnetz, chord network, colour content, tonal orientation.",
+   "note": "Phase 5 in progress: the shipped descriptors serve Audiology; Phase 5 still lists open slices.",
+   "decisions": []
+  },
+  {
+   "id": "mcp",
+   "name": "MCP endpoint (79 tools)",
+   "group": "doors",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "P4",
+    "G27"
+   ],
+   "deps": [],
+   "what": "The agent door: one tool per entry point, boundary validation from annotations, a pinned manifest of every name, signature and description.",
+   "note": "Phase 4 done; hardened by gap 27 (manifest pin, fuzz, guards).",
+   "decisions": [
+    "Gap 27: whether to take a public registry listing (waits on P0.3)"
+   ]
+  },
+  {
+   "id": "bridge",
+   "name": "HTTP bridge",
+   "group": "doors",
+   "status": "shipped",
+   "in1": "yes",
+   "cites": [
+    "G9"
+   ],
+   "deps": [
+    [
+     "mcp",
+     "G9"
+    ]
+   ],
+   "what": "The same tools as JSON over loopback HTTP, with an origin allowlist; Audiology's lifeline door.",
+   "note": "Shipped (gap 9); strict Content-Length since 2026-10-08.",
+   "decisions": []
+  },
+  {
+   "id": "security",
+   "name": "Security P0",
+   "group": "quality",
+   "status": "in progress",
+   "in1": "yes",
+   "cites": [
+    "G27",
+    "D18"
+   ],
+   "deps": [
+    [
+     "mcp",
+     "G27"
+    ]
+   ],
+   "what": "Trust-boundary inventory, boundary validator, resource limits, path allowlist, hash-pinned supply chain, SBOM, weekly upstream canary.",
+   "note": "Reopened 2026-10-17 as P0.3: an independent review found work exhaustion (an exponential voice-leading search, unbounded MIDI work), a stdio wedge through /dev/stdin, and about 40 inputs that reach a 500. The guards from 10-08/09 hold for what they target; the fix order is in gap 27.",
+   "decisions": [
+    "Approve the P0.3 fix order (gap 27)"
+   ]
+  },
+  {
+   "id": "port",
+   "name": "C++ port + conformance corpus",
+   "group": "doors",
+   "status": "in progress",
+   "in1": "yes",
+   "cites": [
+    "P8",
+    "D10"
+   ],
+   "deps": [
+    [
+     "identity",
+     "P8"
+    ]
+   ],
+   "what": "The native port in tonality-core, held to parity by the conformance corpus and the engine's port-pin fingerprint.",
+   "note": "Parity green on the ported surface; Phase 8 lists further slices.",
+   "decisions": [
+    "Enable branch protection on tonality-core (Phase 8)"
+   ]
+  },
+  {
+   "id": "sdk2",
+   "name": "MCP SDK 2.x port",
+   "group": "doors",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G29"
+   ],
+   "deps": [
+    [
+     "mcp",
+     "G29"
+    ],
+    [
+     "security",
+     "G29"
+    ]
+   ],
+   "what": "Port build_server() to the 2.x MCPServer API so the mcp<2 ceiling can drop.",
+   "note": "Open (gap 29). The weekly canary measured 2.3.0 failing exactly the two fastmcp tests, so the surface is small. The 1.0 plan makes it a MUST: 1.0 should not freeze on a deprecated SDK major.",
+   "decisions": []
+  },
+  {
+   "id": "tiers",
+   "name": "Stability tiers",
+   "group": "release",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [
+    [
+     "mcp",
+     "G34"
+    ]
+   ],
+   "what": "Every tool and public function declares stable, provisional or experimental, carried in the tool manifest; 1.0 freezes only stable.",
+   "note": "Proposed (gap 34). The tier assignment table in 1.0-PLAN.md is for Julian to ratify.",
+   "decisions": [
+    "Ratify the proposed tier for each tool"
+   ]
+  },
+  {
+   "id": "locks",
+   "name": "API, schema + prior locks",
+   "group": "release",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [
+    [
+     "tiers",
+     "G34"
+    ]
+   ],
+   "what": "An API-signature lock for stable functions; published JSON Schemas per stable result (additive-only in 1.x); a byte lock on every shipped prior version.",
+   "note": "Proposed (gap 34). The tool-manifest pin and the conformance golden are the existing partial forms.",
+   "decisions": []
+  },
+  {
+   "id": "plan",
+   "name": "Plan framework",
+   "group": "generative",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34",
+    "G26"
+   ],
+   "deps": [
+    [
+     "modal",
+     "G26"
+    ],
+    [
+     "scaleops",
+     "G34"
+    ]
+   ],
+   "what": "Gap 26's plan generalized: a closed edit vocabulary, pure apply that refuses a mismatched source, a versioned schema with frozen-plan tests, and at least three producers (modal, conform, remap).",
+   "note": "Proposed (gap 34). Today only the modal transform emits a plan.",
+   "decisions": []
+  },
+  {
+   "id": "vtemplate",
+   "name": "Voicing template type",
+   "group": "generative",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34",
+    "P1.5"
+   ],
+   "deps": [
+    [
+     "search",
+     "G17"
+    ]
+   ],
+   "what": "The registered-rootless corner of the identity lattice as a first-class type: reduction to shape, realization at a root (generative), enumeration.",
+   "note": "Proposed (gap 34). Templates exist as search_voicings(root=None) output, not yet as a type; the generative voicing API should not freeze without it.",
+   "decisions": []
+  },
+  {
+   "id": "matrix",
+   "name": "Determinism matrix",
+   "group": "release",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [],
+   "what": "Byte-identical outputs across Linux and macOS × Python 3.10–3.13, plus a hash-seed sweep.",
+   "note": "Proposed (gap 34). CI runs Ubuntu × 3.10 and 3.13 today; macOS is covered only locally.",
+   "decisions": []
+  },
+  {
+   "id": "perf",
+   "name": "Performance budgets",
+   "group": "release",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [
+    [
+     "identity",
+     "G34"
+    ],
+    [
+     "dataset",
+     "G34"
+    ]
+   ],
+   "what": "Stated budgets (identity calls, the MIDI pipeline per file, capped calls) with CI ceilings at 3× and tracked medians.",
+   "note": "Proposed (gap 34). Resource limits exist (memory and grid size); no timing budget is enforced.",
+   "decisions": []
+  },
+  {
+   "id": "docs",
+   "name": "Reference docs + changelog",
+   "group": "release",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [
+    [
+     "tiers",
+     "G34"
+    ],
+    [
+     "locks",
+     "G34"
+    ]
+   ],
+   "what": "Generated tool and API references, a conventions page, a priors catalogue, a contracts page and a CHANGELOG.",
+   "note": "Proposed (gap 34). README and INTEGRATION.md are hand-written today.",
+   "decisions": []
+  },
+  {
+   "id": "release",
+   "name": "Release engineering",
+   "group": "release",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [
+    [
+     "locks",
+     "G34"
+    ],
+    [
+     "docs",
+     "G34"
+    ],
+    [
+     "matrix",
+     "G34"
+    ]
+   ],
+   "what": "PyPI via trusted publishing, signed tags, a semver bump checker over the lock diffs, a deprecation policy and a selfcheck command.",
+   "note": "Proposed (gap 34). No tag or release has ever been cut.",
+   "decisions": []
+  },
+  {
+   "id": "v1",
+   "name": "1.0 — the stability line",
+   "group": "milestone",
+   "status": "planned",
+   "in1": "yes",
+   "cites": [
+    "G34"
+   ],
+   "deps": [
+    [
+     "identity",
+     "G34"
+    ],
+    [
+     "keys",
+     "G34"
+    ],
+    [
+     "structural",
+     "G34"
+    ],
+    [
+     "meter",
+     "G34"
+    ],
+    [
+     "atoms",
+     "G34"
+    ],
+    [
+     "dataset",
+     "G34"
+    ],
+    [
+     "rules",
+     "G34"
+    ],
+    [
+     "patterns",
+     "G34"
+    ],
+    [
+     "succession",
+     "G34"
+    ],
+    [
+     "search",
+     "G34"
+    ],
+    [
+     "modal",
+     "G34"
+    ],
+    [
+     "views",
+     "G34"
+    ],
+    [
+     "bridge",
+     "G34"
+    ],
+    [
+     "port",
+     "G34"
+    ],
+    [
+     "security",
+     "G34"
+    ],
+    [
+     "sdk2",
+     "G34"
+    ],
+    [
+     "plan",
+     "G34"
+    ],
+    [
+     "vtemplate",
+     "G34"
+    ],
+    [
+     "perf",
+     "G34"
+    ],
+    [
+     "release",
+     "G34"
+    ]
+   ],
+   "what": "Tonality's first human-cut release tag. Before it, every surface may change; after it, stable surfaces change only under semver.",
+   "note": "Proposed 2026-10-17 (gap 34); not decided until Julian ratifies docs/design/1.0-PLAN.md.",
+   "decisions": [
+    "Ratify (or amend) the 1.0 plan"
+   ]
+  },
+  {
+   "id": "recommend",
+   "name": "Transformation recommendations",
+   "group": "generative",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G32"
+   ],
+   "deps": [
+    [
+     "plan",
+     "G32"
+    ],
+    [
+     "succession",
+     "G32"
+    ]
+   ],
+   "what": "An endpoint that proposes which transformation is worth making, as ranked, evidenced proposals that reference plan artifacts.",
+   "note": "Recorded, not scheduled (gap 32). Needs a frozen plan schema first.",
+   "decisions": []
+  },
+  {
+   "id": "transition",
+   "name": "TransitionIdentity type",
+   "group": "identity",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G30"
+   ],
+   "deps": [
+    [
+     "modal",
+     "G30"
+    ]
+   ],
+   "what": "A typed key-free chord-pair identity that an anchored reading reduces to — the transition-grain lattice.",
+   "note": "An open concern, built only on a trigger (gap 30); one trigger is a plan that must serialize what a transform preserves.",
+   "decisions": []
+  },
+  {
+   "id": "collapse",
+   "name": "Walk preservation under collapse",
+   "group": "generative",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G31"
+   ],
+   "deps": [
+    [
+     "recommend",
+     "G31"
+    ],
+    [
+     "transition",
+     "G31"
+    ],
+    [
+     "plan",
+     "G31"
+    ]
+   ],
+   "what": "Grouped, pattern-grain plan decisions for fitting a scale walk into a smaller scale, offered as ranked, costed options.",
+   "note": "Gap 31(c) is open; the recorded order is to build gap 32's delivery shape first.",
+   "decisions": []
+  },
+  {
+   "id": "plural",
+   "name": "Plural chord hearing + spine decode",
+   "group": "context",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G22"
+   ],
+   "deps": [
+    [
+     "keys",
+     "G22"
+    ]
+   ],
+   "what": "Ranked per-window chord readings with margins, then a deterministic Viterbi decode over them.",
+   "note": "Recorded, unscheduled (gap 22). Gap 25's real fix waits on it.",
+   "decisions": []
+  },
+  {
+   "id": "incremental",
+   "name": "Incremental + streaming APIs",
+   "group": "context",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G5"
+   ],
+   "deps": [
+    [
+     "keys",
+     "G5"
+    ]
+   ],
+   "what": "Rolling key tracking, segmentation and naming that update state instead of recomputing.",
+   "note": "Recorded, unscheduled (gap 5); demand comes from A4 and A5.",
+   "decisions": []
+  },
+  {
+   "id": "contracts",
+   "name": "Compiled harmony contracts",
+   "group": "doors",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G16"
+   ],
+   "deps": [
+    [
+     "search",
+     "G16"
+    ]
+   ],
+   "what": "A versioned, schema-validated artifact freezing pc sets, voicings and voice-leading maps for real-time clients with no Tonality runtime.",
+   "note": "Recorded, unscheduled (gap 16); consumer AURICLE.",
+   "decisions": []
+  },
+  {
+   "id": "chroma",
+   "name": "Catalogue contract + pitch scorer",
+   "group": "identity",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G18"
+   ],
+   "deps": [
+    [
+     "identity",
+     "G18"
+    ]
+   ],
+   "what": "A versioned pc and interval catalogue contract plus a deterministic pitch-answer scorer with test vectors.",
+   "note": "Recorded; blocked on Audiology's module-contract sketch (gap 18).",
+   "decisions": []
+  },
+  {
+   "id": "validation",
+   "name": "Multi-dimensional validation",
+   "group": "quality",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G15"
+   ],
+   "deps": [
+    [
+     "meter",
+     "G15"
+    ],
+    [
+     "repair",
+     "G15"
+    ]
+   ],
+   "what": "Generalize the key-accuracy harness to meter, tempo and groove.",
+   "note": "Recorded; held for discussion (gap 15).",
+   "decisions": [
+    "Gap 15: discuss, or keep holding"
+   ]
+  },
+  {
+   "id": "rhythmsearch",
+   "name": "Rhythmic constraint search",
+   "group": "generative",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G21"
+   ],
+   "deps": [
+    [
+     "search",
+     "G21"
+    ]
+   ],
+   "what": "A rhythm cycle as a bitmask over Z_N, so pitch-class set search applies to rhythm.",
+   "note": "Recorded; build when a consumer pulls it (gap 21).",
+   "decisions": []
+  },
+  {
+   "id": "instrument",
+   "name": "Instrument-class profiles",
+   "group": "rules",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G3"
+   ],
+   "deps": [],
+   "what": "Register range, polyphony and idiom per instrument class, as a versioned data vocabulary for A3.",
+   "note": "Recorded, unscheduled (gap 3).",
+   "decisions": []
+  },
+  {
+   "id": "ji",
+   "name": "Consonance-gravity ratio priors",
+   "group": "identity",
+   "status": "recorded",
+   "in1": "no",
+   "cites": [
+    "G24"
+   ],
+   "deps": [],
+   "what": "A static, versioned table of just-intonation ratio priors for HYPERSAW.",
+   "note": "Ratified but not yet requested by the consumer (gap 24).",
+   "decisions": []
+  },
+  {
+   "id": "tuning",
+   "name": "Beyond 12-TET",
+   "group": "identity",
+   "status": "post-1.0",
+   "in1": "no",
+   "cites": [
+    "P6"
+   ],
+   "deps": [],
+   "what": "Generalized identity beyond twelve-tone equal temperament.",
+   "note": "Phase 6 (future); its ADR is still to be written.",
+   "decisions": []
+  },
+  {
+   "id": "live",
+   "name": "Live MIDI input",
+   "group": "time",
+   "status": "parked",
+   "in1": "no",
+   "cites": [
+    "G4"
+   ],
+   "deps": [],
+   "what": "Streaming events_from_live_midi.",
+   "note": "Descoped until A4 is scheduled (gap 4).",
+   "decisions": []
+  }
+ ],
+ "promises": [
+  {
+   "id": "1",
+   "text": "Every tool and public function declares a stability tier; only stable is frozen.",
+   "level": "MUST",
+   "verify": "manifest test fails on a tool without a tier",
+   "today": "open",
+   "nodes": [
+    "tiers"
+   ]
+  },
+  {
+   "id": "2",
+   "text": "Stable tool names and signatures are frozen; descriptions change only in a reviewed diff.",
+   "level": "MUST",
+   "verify": "tests/test_tool_manifest_pin.py plus an additive-vs-breaking classifier",
+   "today": "partial",
+   "nodes": [
+    "mcp",
+    "tiers"
+   ]
+  },
+  {
+   "id": "3",
+   "text": "Stable function signatures are frozen for 1.x (additive keyword arguments allowed).",
+   "level": "MUST",
+   "verify": "api.lock.json signature diff in the dev suite",
+   "today": "open",
+   "nodes": [
+    "locks"
+   ]
+  },
+  {
+   "id": "4",
+   "text": "Stable result JSON is additive-only: fields may be added, never removed, renamed or retyped.",
+   "level": "MUST",
+   "verify": "published JSON Schemas plus a schema-compatibility check",
+   "today": "partial",
+   "nodes": [
+    "locks"
+   ]
+  },
+  {
+   "id": "5",
+   "text": "Every shipped prior version is immutable and loadable for all of 1.x; changing a default is a MINOR release with an impact report.",
+   "level": "MUST",
+   "verify": "byte lock on prior versions; results cite resolvable versions",
+   "today": "partial",
+   "nodes": [
+    "locks",
+    "keys"
+   ]
+  },
+  {
+   "id": "6",
+   "text": "\"Every\" and \"all\" are literal: exhaustive entry points match brute-force oracles; the naming fallback is never empty over all 4,096 sets.",
+   "level": "MUST",
+   "verify": "oracle tests over bounded spaces; an exhaustive fallback property test",
+   "today": "partial",
+   "nodes": [
+    "identity",
+    "search"
+   ]
+  },
+  {
+   "id": "7",
+   "text": "Errors over guesses, and no silent caps: under-specified input raises; truncated lists carry their true total.",
+   "level": "MUST",
+   "verify": "spec-level refusal tests plus a contract test over capped lists",
+   "today": "partial",
+   "nodes": [
+    "identity",
+    "search",
+    "views"
+   ]
+  },
+  {
+   "id": "8",
+   "text": "Byte-identical outputs across Linux and macOS × Python 3.10–3.13.",
+   "level": "MUST",
+   "verify": "CI matrix plus a PYTHONHASHSEED sweep",
+   "today": "partial",
+   "nodes": [
+    "matrix"
+   ]
+  },
+  {
+   "id": "9",
+   "text": "Untrusted input cannot exhaust, crash or escape the engine; dependencies are pinned and scanned.",
+   "level": "MUST",
+   "verify": "test_mcp_fuzz, test_resource_limits, test_supply_chain, upstream-canary, plus a property fuzz (P0.3)",
+   "today": "partial",
+   "nodes": [
+    "security"
+   ]
+  },
+  {
+   "id": "10",
+   "text": "The endpoint runs on the supported MCP SDK major, with no ceiling.",
+   "level": "MUST",
+   "verify": "the canary's newest leg promoted to blocking",
+   "today": "open",
+   "nodes": [
+    "sdk2"
+   ]
+  },
+  {
+   "id": "11",
+   "text": "Stated performance budgets hold.",
+   "level": "MUST",
+   "verify": "benchmark suite with CI ceilings at 3×",
+   "today": "partial",
+   "nodes": [
+    "perf"
+   ]
+  },
+  {
+   "id": "12",
+   "text": "Every generative entry point returns or references a versioned plan; apply is pure; plans round-trip through JSON.",
+   "level": "MUST",
+   "verify": "plan contract tests and a frozen-plan corpus",
+   "today": "partial",
+   "nodes": [
+    "plan",
+    "modal",
+    "scaleops"
+   ]
+  },
+  {
+   "id": "13",
+   "text": "The voicing template is a first-class type before the generative voicing API is frozen.",
+   "level": "MUST",
+   "verify": "type, reduction and enumeration tests",
+   "today": "partial",
+   "nodes": [
+    "vtemplate"
+   ]
+  },
+  {
+   "id": "14",
+   "text": "No analysis result contains a plan or a voicing the input did not determine.",
+   "level": "MUST",
+   "verify": "a contract test over every analysis result type",
+   "today": "partial",
+   "nodes": [
+    "plan",
+    "mcp"
+   ]
+  },
+  {
+   "id": "15",
+   "text": "The native port's conformance corpus is versioned, pinned and regenerated every release.",
+   "level": "MUST",
+   "verify": "tests/test_port_pin.py",
+   "today": "met",
+   "nodes": [
+    "port"
+   ]
+  },
+  {
+   "id": "16",
+   "text": "Generated tool and API references, a conventions page, a priors catalogue, a contracts page and a CHANGELOG.",
+   "level": "MUST",
+   "verify": "docs build in CI; generated pages cannot drift",
+   "today": "partial",
+   "nodes": [
+    "docs"
+   ]
+  },
+  {
+   "id": "17",
+   "text": "Releases go to PyPI from signed tags, at a version the bump checker computed.",
+   "level": "MUST",
+   "verify": "a release workflow that refuses otherwise",
+   "today": "open",
+   "nodes": [
+    "release"
+   ]
+  },
+  {
+   "id": "18",
+   "text": "Accuracy is published per default prior, labelled as measured, not guaranteed.",
+   "level": "NICE",
+   "verify": "the validation report regenerated per release",
+   "today": "partial",
+   "nodes": [
+    "keys"
+   ]
+  }
+ ],
+ "order": [
+  {
+   "k": "Slice 0",
+   "title": "Close P0.3 (security)",
+   "nodes": [
+    "security",
+    "mcp",
+    "bridge"
+   ],
+   "why": "First: the regular-file check and bridge JSON/timeout handling (stops a wedge), then the voice-leading DP, validator caps, MIDI caps and work budgets, then a property fuzz."
+  },
+  {
+   "k": "Slice A",
+   "title": "Scrape the confirmed debt (RE-7a–i)",
+   "nodes": [
+    "mcp",
+    "keys",
+    "meter"
+   ],
+   "why": "One safe slice with no output changes: shared argument converters, one window enumerator, named tolerances, imported defaults, the session twins."
+  },
+  {
+   "k": "Slice B",
+   "title": "Tier and freeze the surface",
+   "nodes": [
+    "tiers",
+    "locks"
+   ],
+   "why": "Ratify the tier table, then add the tier field to the manifest and the API, schema and prior locks. Everything after 1.0 rests on these."
+  },
+  {
+   "k": "Slice C",
+   "title": "Generative prerequisites",
+   "nodes": [
+    "plan",
+    "vtemplate"
+   ],
+   "why": "Generalize the plan to conform and remap, and make the voicing template a type, before freezing anything generative."
+  },
+  {
+   "k": "Slice D",
+   "title": "Platform: SDK 2.x, determinism, performance",
+   "nodes": [
+    "sdk2",
+    "matrix",
+    "perf"
+   ],
+   "why": "Port the server to SDK 2.x and promote the canary's newest leg to blocking; add the OS × Python matrix and the timing budgets."
+  },
+  {
+   "k": "Slice E",
+   "title": "Docs and release",
+   "nodes": [
+    "docs",
+    "release",
+    "v1"
+   ],
+   "why": "Generated references, a changelog, PyPI and the bump checker. Then Julian cuts the tag."
+  },
+  {
+   "k": "After 1.0",
+   "title": "The recorded generative line",
+   "nodes": [
+    "recommend",
+    "transition",
+    "collapse"
+   ],
+   "why": "Gap 32's delivery shape first, then 31(c), with gap 30's type in view (the recorded sequencing note)."
+  }
+ ],
+ "citeTitles": {
+  "D10": "C++ is the performance home — dual implementation, golden-anchored.",
+  "D18": "File-reading tools obey an operator allowlist, unrestricted by default;",
+  "G1": "MIDI export",
+  "G3": "Instrument-class profiles",
+  "G4": "Live MIDI input",
+  "G5": "Online/incremental analysis APIs",
+  "G7": "Cadence detection as evidenced events",
+  "G8": "Catalog containment query",
+  "G9": "The web door",
+  "G10": "Groove extract / apply",
+  "G11": "Meter estimation",
+  "G12": "Performed-input tolerance",
+  "G13": "Per-region analytical context in the A1 pipeline",
+  "G14": "Next-chord recommendation",
+  "G15": "Multi-dimensional validation program",
+  "G16": "Compiled harmony contracts",
+  "G17": "Constrained voicing enumeration + ranking",
+  "G18": "Catalog contract + pitch-answer scorer",
+  "G19": "Melodic tendency / attraction prior",
+  "G20": "Satisfaction-loop hooks / preference-weighted rulesets",
+  "G21": "Rhythmic constraint search",
+  "G22": "Windowed plural chord hearing + the canonical spine decode",
+  "G23": "Budget rules — a rule gated on its violation RATE",
+  "G24": "Consonance-gravity ratio priors",
+  "G25": "Chromatic-event classification — borrowed chord vs. key change vs. ambiguous",
+  "G26": "Modal transform — analyze a piece, then switch its MODE (not transpose it)",
+  "G27": "MCP security hardening — the P0 posture",
+  "G28": "Drum-pattern analysis — GM roles + named rhythmic patterns",
+  "G29": "Port `build_server()` to the MCP SDK 2.x API",
+  "G30": "Two frames of pair-grain analysis — no first-class `TransitionIdentity`",
+  "G31": "Pattern-preserving transformation",
+  "G32": "Transformation recommendation surface",
+  "G33": "Unmatched-naming fallback — \"no known identity\" made impossible at the surface, as it already was in the engine",
+  "G34": "The 1.0 line — PROPOSED 2026-10-17, awaiting Julian's ratification",
+  "P1": "Phase 1 — Formalize the identity model ✅ DONE",
+  "P1.5": "Phase 1.5 — Vocabulary completeness (voicings + enharmonic equivalence)",
+  "P2": "Phase 2 — Temporal layer ✅ DONE",
+  "P3": "Phase 3 — Contextualization & dataset schema ✅ DONE",
+  "P3.5": "Phase 3.5 — Identity-analysis primitives & key induction ✅ DONE",
+  "P4": "Phase 4 — MCP endpoint",
+  "P4.5": "Phase 4.5 — Contextual & statistical interpretation (corpus-driven)",
+  "P4.6": "Phase 4.6 — Rulesets: a constraint syntax over the analytical vocabulary",
+  "P5": "Phase 5 — Representation / projection layer (projections as data)",
+  "P6": "Phase 6 (future) — Beyond 12-TET: generalized identity",
+  "P7": "Phase 7 (in progress) — Generative: voice leading & progression realization",
+  "P8": "Phase 8 (in progress) — C++ core, dual implementation (Decision 10, revised 2026-06-29)"
+ }
+}
+</script>
+<script>
+/* ---------- constants, declared before anything that runs at setup ---------- */
+const DATA = JSON.parse(document.getElementById('plan-data').textContent);
+const STATUSES = ['shipped', 'in progress', 'ruled', 'planned', 'recorded', 'post-1.0', 'parked'];
+const SCOLOR = { 'shipped':'--s-shipped', 'in progress':'--s-prog', 'ruled':'--s-ruled', 'planned':'--s-planned',
+                 'recorded':'--s-recorded', 'post-1.0':'--s-post', 'parked':'--s-parked' };
+const SINK = 'v1';
+const NW = 178, NH = 40, COLW = 198, ROWH = 76, PADX = 18, PADY = 34, MAXCOL = 7;
+// Gap entries live between these two markers in ROADMAP.md; other numbered lists exist in the file
+// (standing reviews), so a bare /^\d+\. \*\*/ would cite the wrong entry.
+const GAP_START = '\n1. **MIDI export**', GAP_END = '\n## Decisions on record';
+const SOURCES = { roadmap:['../../ROADMAP.md', 'ROADMAP.md'], decisions:['../../DECISIONS.md', 'DECISIONS.md'],
+                  plan:['1.0-PLAN.md'] };
+const ST = { theme:'auto', sel:null, live:null, crit:[] };
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function qp(name, dflt) { const m = new RegExp('[?&]' + name + '=([^&#]*)').exec(String(location.search || '')); return m ? decodeURIComponent(m[1]) : dflt; }
+function byId(nodes) { const m = {}; for (const n of nodes) m[n.id] = n; return m; }
+function isCite(b) { return /^(G\d+|P[\d.]+|D\d+)$/.test(String(b).split(/[\s:]/)[0]); }
+
+/* ---------- graph algorithms (pure; the self-checks call them on planted copies) ---------- */
+function topo(nodes) {
+  const ids = new Set(nodes.map(n => n.id)), indeg = {}, out = {};
+  for (const n of nodes) { indeg[n.id] = 0; out[n.id] = []; }
+  for (const n of nodes) for (const [d] of n.deps) if (ids.has(d)) { indeg[n.id]++; out[d].push(n.id); }
+  const q = nodes.filter(n => indeg[n.id] === 0).map(n => n.id), order = [];
+  while (q.length) { const v = q.shift(); order.push(v); for (const w of out[v]) if (--indeg[w] === 0) q.push(w); }
+  return { order, cyclic: order.length !== nodes.length, stuck: nodes.filter(n => !order.includes(n.id)).map(n => n.id) };
+}
+function longestTo(nodes, target) {
+  const m = byId(nodes), t = topo(nodes); if (t.cyclic) return null;
+  const best = {}, prev = {};
+  for (const id of t.order) {
+    const n = m[id]; if (n.in1 !== 'yes') continue;
+    best[id] = 1; prev[id] = null;
+    // Ties break on the prerequisite listed first, so the path is a pure function of the data.
+    for (const [d] of n.deps) if (best[d] !== undefined && best[d] + 1 > best[id]) { best[id] = best[d] + 1; prev[id] = d; }
+  }
+  if (best[target] === undefined) return null;
+  const path = []; for (let v = target; v; v = prev[v]) path.unshift(v);
+  return path;
+}
+function depthOf(nodes) {
+  const m = byId(nodes), t = topo(nodes), depth = {};
+  for (const id of t.order) { let d = 0; for (const [p] of m[id].deps) if (depth[p] !== undefined) d = Math.max(d, depth[p] + 1); depth[id] = d; }
+  return depth;
+}
+
+/* ---------- source parsing (mirrored by tests/test_plan_map.py) ---------- */
+function parseRoadmap(text) {
+  const out = {}, s = String(text), a = s.indexOf(GAP_START), b = s.indexOf(GAP_END);
+  if (a >= 0 && b > a) {
+    const block = s.slice(a, b).split('\n');
+    for (let i = 0; i < block.length; i++) {
+      const m = /^(\d+)\. \*\*(.*)$/.exec(block[i]); if (!m) continue;
+      let title = m[2]; if (!title.includes('**') && i + 1 < block.length) title += ' ' + block[i + 1].trim();
+      out['G' + m[1]] = title.split('**')[0].trim();
+    }
+  }
+  const ph = /^### Phase ([\d.]+)\b(.*)$/gm; let mm;
+  while ((mm = ph.exec(s))) out['P' + mm[1]] = ('Phase ' + mm[1] + mm[2]).trim();
+  return out;
+}
+function parseDecisions(text) {
+  const out = {}, re = /^(\d+)\. \*\*(.*)$/gm; let m;
+  while ((m = re.exec(String(text)))) out['D' + m[1]] = m[2].split('**')[0].trim();
+  return out;
+}
+function parsePlanTable(text) {
+  // Between <!-- parts-table:start --> and <!-- parts-table:end -->:  | Part | `id` | status | cites | needs |
+  const s = String(text), a = s.indexOf('<!-- parts-table:start -->'), b = s.indexOf('<!-- parts-table:end -->');
+  if (a < 0 || b < a) return null;
+  const out = {}, list = x => x.replace(/`/g, '').split(',').map(y => y.trim()).filter(y => y && y !== '—');
+  for (const line of s.slice(a, b).split('\n')) {
+    const c = line.split('|').map(x => x.trim()); if (c.length < 7) continue;
+    const id = /^`([a-z0-9-]+)`$/.exec(c[2]); if (!id) continue;
+    out[id[1]] = { status:c[3], cites:list(c[4]), deps:list(c[5]) };
+  }
+  return out;
+}
+
+/* ---------- checks: each returns {ok,msg} or {skip,msg}; each control must make its check FAIL ---------- */
+function checkCitations(nodes, live) {
+  if (!live || !live.roadmap || !live.decisions) return { skip:true, msg:'needs ROADMAP.md and DECISIONS.md served over HTTP' };
+  const known = Object.assign({}, live.roadmap, live.decisions), bad = [];
+  for (const n of nodes) { if (n.id !== SINK && !n.cites.length) bad.push(n.id + ' cites nothing');
+    for (const c of n.cites) if (!known[c]) bad.push(n.id + ':' + c); }
+  return { ok:!bad.length, msg: bad.length ? 'missing citations: ' + bad.join(', ') : 'all ' + nodes.reduce((k, n) => k + n.cites.length, 0) + ' citations resolve' };
+}
+function checkAcyclic(nodes) { const t = topo(nodes); return { ok:!t.cyclic, msg: t.cyclic ? 'cycle through: ' + t.stuck.join(', ') : 'topological order covers all ' + nodes.length + ' parts' }; }
+function checkRefs(nodes) {
+  const ids = new Set(nodes.map(n => n.id)), bad = [];
+  for (const n of nodes) { if (!STATUSES.includes(n.status)) bad.push(n.id + ' status "' + n.status + '"');
+    for (const [d] of n.deps) if (!ids.has(d)) bad.push(n.id + ' needs unknown ' + d); }
+  return { ok:!bad.length, msg: bad.length ? bad.join('; ') : 'every edge names a part; every status is in the vocabulary' };
+}
+function checkPlanDoc(nodes, table) {
+  if (!table) return { skip:true, msg:'needs docs/design/1.0-PLAN.md served, with its parts-table markers' };
+  const bad = [], same = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+  for (const n of nodes) { const d = table[n.id]; if (!d) { bad.push(n.id + ' missing from the doc'); continue; }
+    if (d.status !== n.status) bad.push(n.id + ' status ' + d.status + ' ≠ ' + n.status);
+    if (!same(d.cites, n.cites)) bad.push(n.id + ' cites differ');
+    if (!same(d.deps, n.deps.map(x => x[0]))) bad.push(n.id + ' prerequisites differ'); }
+  for (const id in table) if (!nodes.some(n => n.id === id)) bad.push(id + ' in the doc, not the map');
+  return { ok:!bad.length, msg: bad.length ? bad.join('; ') : 'the doc table matches all ' + nodes.length + ' parts' };
+}
+function checkCrit(nodes, path) {
+  const m = byId(nodes);
+  if (!path || !path.length || path[path.length - 1] !== SINK) return { ok:false, msg:'the path does not end at ' + SINK };
+  for (let i = 1; i < path.length; i++) if (!m[path[i]] || !m[path[i]].deps.some(d => d[0] === path[i - 1])) return { ok:false, msg:path[i - 1] + ' → ' + path[i] + ' is not an edge' };
+  const best = longestTo(nodes, SINK);
+  return best && best.length === path.length ? { ok:true, msg:path.length + ' parts; no longer chain among the 1.0 parts' } : { ok:false, msg:'a longer chain exists (' + (best ? best.length : '?') + ')' };
+}
+function checkPromises(promises, nodes) {
+  const ids = new Set(nodes.map(n => n.id)), bad = [];
+  for (const p of promises) { if (!p.verify) bad.push(p.id + ' has no gate'); for (const n of p.nodes) if (!ids.has(n)) bad.push(p.id + ' → ' + n); }
+  return { ok:!bad.length, msg: bad.length ? bad.join('; ') : 'all ' + promises.length + ' promises name a gate and real parts' };
+}
+function runChecks() {
+  const N = DATA.nodes, P = DATA.promises, rows = [];
+  const plantCite = N.concat([{ id:'zz', name:'planted', status:'planned', in1:'yes', cites:['G9999'], deps:[] }]);
+  const plantCycle = N.map(n => n.id === N[0].id ? Object.assign({}, n, { deps:n.deps.concat([[SINK, 'planted']]) }) : n);
+  const plantRef = N.map((n, i) => i === 1 ? Object.assign({}, n, { deps:n.deps.concat([['nope', 'planted']]) }) : n);
+  let tMut = null; const tbl = ST.live && ST.live.plan;
+  if (tbl) { tMut = JSON.parse(JSON.stringify(tbl)); const k = Object.keys(tMut)[0]; tMut[k].status = tMut[k].status === 'shipped' ? 'planned' : 'shipped'; }
+  const crit = ST.crit, critMut = crit.length > 2 ? crit.slice(0, 1).concat(crit.slice(2)) : [SINK, SINK];
+  const plantPromise = P.concat([{ id:'X', text:'planted', verify:'', nodes:['nope'] }]);
+  const add = (name, real, ctl) => rows.push({ name, real, ctl });
+  add('1 citations', checkCitations(N, ST.live), checkCitations(plantCite, ST.live));
+  add('2 acyclic', checkAcyclic(N), checkAcyclic(plantCycle));
+  add('3 references', checkRefs(N), checkRefs(plantRef));
+  add('4 doc ↔ map', checkPlanDoc(N, tbl), checkPlanDoc(N, tMut));
+  add('5 critical path', checkCrit(N, crit), checkCrit(N, critMut));
+  add('6 promises', checkPromises(P, N), checkPromises(plantPromise, N));
+  let pass = 0, fired = 0, skipped = 0;
+  for (const r of rows) { if (r.real.skip) skipped++; else if (r.real.ok) pass++; if (!r.ctl.skip && !r.ctl.ok) fired++; }
+  const green = pass === rows.length && fired === rows.length;
+  const v = green ? 'Self-check green: ' + pass + '/' + rows.length + ' pass, every control fires'
+                  : 'Self-check ' + (skipped ? 'incomplete' : 'red') + ': ' + pass + '/' + rows.length + ' pass, ' + fired + '/' + rows.length + ' controls fire' + (skipped ? ', ' + skipped + ' skipped (serve the repo)' : '');
+  let h = '<div class="verdict ' + (green ? 'ok' : skipped ? 'skip' : 'bad') + '">' + esc(v) + '</div>';
+  for (const r of rows) {
+    const c = r.real.skip ? '<span class="skip">SKIP</span>' : r.real.ok ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>';
+    const k = r.ctl.skip ? '<span class="skip">control skip</span>' : !r.ctl.ok ? '<span class="ok">control fires</span>' : '<span class="bad">CONTROL DID NOT FIRE</span>';
+    h += '<div class="r"><b>' + esc(r.name) + '</b><div>' + c + ' ' + esc(r.real.msg) + '<br>' + k + ' — ' + esc(r.ctl.msg) + '</div></div>';
+  }
+  $('checkOut').innerHTML = h; $('checkCard').hidden = false;
+  document.title = (green ? '[green] ' : '[not green] ') + 'Tonality plan map';
+  return green;
+}
+
+/* ---------- rendering ---------- */
+function layout() {
+  // One row per dependency layer, top to bottom. Post-1.0 parts sit below the 1.0 line even when their
+  // prerequisites would allow them higher; parked parts get their own last row. A layer wider than
+  // MAXCOL wraps onto extra lines, so the canvas stays readable instead of scrolling two screens wide.
+  const N = DATA.nodes, depth = depthOf(N), pos = {}, rows = {};
+  const sinkRow = depth[SINK], groups = DATA.groups;
+  const rowOf = n => n.status === 'parked' ? 'park' : n.in1 === 'no' ? Math.max(depth[n.id], sinkRow + 1) : depth[n.id];
+  for (const n of N) (rows[rowOf(n)] = rows[rowOf(n)] || []).push(n);
+  const keys = Object.keys(rows).filter(k => k !== 'park').map(Number).sort((a, b) => a - b);
+  if (rows.park) keys.push('park');
+  let widest = 0, vr = 0; const firstLine = {};
+  for (const k of keys) {
+    const row = rows[k];
+    const bc = n => { const xs = n.deps.map(x => pos[x[0]]).filter(Boolean).map(p => p.c); return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : groups.indexOf(n.group) / 3 - 2; };
+    row.sort((a, b) => bc(a) - bc(b) || groups.indexOf(a.group) - groups.indexOf(b.group) || (a.id < b.id ? -1 : 1));
+    firstLine[k] = vr;
+    for (let i = 0; i < row.length; i += MAXCOL) {
+      const line = row.slice(i, i + MAXCOL);
+      line.forEach((n, j) => { pos[n.id] = { r:vr, c:j - (line.length - 1) / 2 }; });
+      widest = Math.max(widest, line.length); vr++;
+    }
+  }
+  const w = PADX * 2 + widest * COLW, mid = w / 2;
+  for (const id in pos) { const p = pos[id]; p.x = mid + p.c * COLW - NW / 2; p.y = PADY + p.r * ROWH; }
+  const lineAt = r => PADY + r * ROWH - (ROWH - NH) / 2;
+  const after = keys.find(k => k !== 'park' && k > sinkRow);
+  return { pos, w, h:PADY * 2 + vr * ROWH,
+           cut:after !== undefined ? lineAt(firstLine[after]) : null, park:rows.park ? lineAt(firstLine.park) : null };
+}
+function render() {
+  const L = layout(), N = DATA.nodes, m = byId(N), crit = new Set(ST.crit), critE = new Set();
+  for (let i = 1; i < ST.crit.length; i++) critE.add(ST.crit[i - 1] + '>' + ST.crit[i]);
+  const sel = ST.sel, near = new Set();
+  if (sel) { near.add(sel); for (const [d] of m[sel].deps) near.add(d); for (const n of N) if (n.deps.some(x => x[0] === sel)) near.add(n.id); }
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + L.w + '" height="' + L.h + '" viewBox="0 0 ' + L.w + ' ' + L.h + '">';
+  s += '<text class="lanelbl" x="' + PADX + '" y="18">PREREQUISITES FLOW DOWN · ONE ROW PER DEPENDENCY LAYER</text>';
+  if (L.cut) s += '<line class="lane" x1="0" x2="' + L.w + '" y1="' + L.cut + '" y2="' + L.cut + '"/><text class="lanelbl" x="' + PADX + '" y="' + (L.cut + 14) + '">AFTER 1.0</text>';
+  if (L.park) s += '<line class="lane" x1="0" x2="' + L.w + '" y1="' + L.park + '" y2="' + L.park + '"/><text class="lanelbl" x="' + PADX + '" y="' + (L.park + 14) + '">PARKED</text>';
+  for (const n of N) for (const [d, basis] of n.deps) {
+    const a = L.pos[d], b = L.pos[n.id]; if (!a || !b) continue;
+    const x1 = a.x + NW / 2, y1 = a.y + NH, x2 = b.x + NW / 2, y2 = b.y, my = (y1 + y2) / 2;
+    const cls = ['e']; if (!isCite(basis)) cls.push('inf'); if (critE.has(d + '>' + n.id)) cls.push('crit'); else if (n.id === SINK) cls.push('tosink');
+    if (sel) cls.push(n.id === sel || d === sel ? 'hl' : 'dimmed');
+    s += '<path class="' + cls.join(' ') + '" d="M' + x1 + ',' + y1 + ' C' + x1 + ',' + my + ' ' + x2 + ',' + my + ' ' + x2 + ',' + y2 + '"><title>' + esc(m[d].name + ' → ' + n.name + ' (' + basis + ')') + '</title></path>';
+  }
+  for (const n of N) {
+    const p = L.pos[n.id], cls = ['n']; if (crit.has(n.id)) cls.push('crit'); if (n.in1 === 'open') cls.push('open1');
+    if (sel === n.id) cls.push('sel'); else if (sel && !near.has(n.id)) cls.push('dimmed');
+    const label = n.name.length > 25 ? n.name.slice(0, 24) + '…' : n.name;
+    s += '<g class="' + cls.join(' ') + '" data-id="' + n.id + '" transform="translate(' + p.x + ',' + p.y + ')" tabindex="0" role="button" aria-label="' + esc(n.name + ', ' + n.status) + '">' +
+      '<rect class="box" width="' + NW + '" height="' + NH + '" rx="6"/>' +
+      '<rect width="6" height="' + NH + '" rx="3" style="fill:var(' + SCOLOR[n.status] + ')"/>' +
+      '<text class="nm" x="13" y="17">' + esc(label) + '</text>' +
+      '<text class="st" x="13" y="31">' + esc(n.status.toUpperCase() + (n.in1 === 'open' ? ' · 1.0?' : '')) + '</text><title>' + esc(n.name) + '</title></g>';
+  }
+  $('canvas').innerHTML = s + '</svg>';
+  for (const g of $('canvas').querySelectorAll('g.n')) {
+    g.onclick = () => select(g.getAttribute('data-id'));
+    g.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(g.getAttribute('data-id')); } };
+  }
+}
+function citeHtml(c) {
+  const known = ST.live ? Object.assign({}, ST.live.roadmap || {}, ST.live.decisions || {}) : null;
+  const snap = DATA.citeTitles && DATA.citeTitles[c];
+  if (known && known[c]) return '<div class="cite"><b>' + esc(c) + '</b>' + esc(known[c]) + '</div>';
+  if (known && (ST.live.roadmap || ST.live.decisions)) return '<div class="cite missing"><b>' + esc(c) + '</b><span class="bad">not found in the served files</span></div>';
+  return '<div class="cite"><b>' + esc(c) + '</b>' + esc(snap || '') + ' <span class="note">(snapshot ' + esc(DATA.asOf) + ')</span></div>';
+}
+function side() {
+  const N = DATA.nodes, m = byId(N), id = ST.sel;
+  if (!id) { $('side').innerHTML = '<h3>Select a part</h3><p>Each box is one part of the plan. Its left bar is the status colour, a red outline marks the critical path, and a dashed outline marks a part whose 1.0 membership is open. Solid edges cite a ROADMAP gap, phase or Decision; dashed edges are the plan\'s own inference. Hover an edge to see its basis.</p><p style="margin-top:8px">The prose plan is <code>docs/design/1.0-PLAN.md</code>. ROADMAP.md outranks both.</p>'; return; }
+  const n = m[id], dependents = N.filter(x => x.deps.some(d => d[0] === id));
+  let h = '<h3>' + esc(n.name) + '</h3><span class="stag" style="--sc:var(' + SCOLOR[n.status] + ')">' + esc(n.status) + '</span> <span class="note">id <code>' + esc(n.id) + '</code> · in 1.0: ' + esc(n.in1) + '</span>';
+  h += '<h4>What it is</h4><p>' + esc(n.what) + '</p><h4>Where it stands</h4><p>' + esc(n.note) + '</p>';
+  h += '<h4>Governing entries</h4>' + (n.cites.length ? n.cites.map(citeHtml).join('') : '<p>none</p>');
+  h += '<h4>Needs first</h4><ul>' + (n.deps.length ? n.deps.map(([d, b]) => '<li><a class="nd" data-go="' + esc(d) + '">' + esc(m[d] ? m[d].name : d) + '</a> <span class="note">(' + esc(b) + ')</span></li>').join('') : '<li>nothing</li>') + '</ul>';
+  h += '<h4>Unblocks</h4><ul>' + (dependents.length ? dependents.map(x => '<li><a class="nd" data-go="' + esc(x.id) + '">' + esc(x.name) + '</a></li>').join('') : '<li>nothing</li>') + '</ul>';
+  h += '<h4>Open decisions for Julian</h4><ul>' + (n.decisions.length ? n.decisions.map(d => '<li>' + esc(d) + '</li>').join('') : '<li>none recorded</li>') + '</ul>';
+  $('side').innerHTML = h;
+  for (const a of $('side').querySelectorAll('a.nd')) a.onclick = () => select(a.getAttribute('data-go'));
+}
+function select(id) { ST.sel = ST.sel === id ? null : id; render(); side(); }
+function chip(id) { const n = byId(DATA.nodes)[id]; return '<button type="button" class="nchip" style="--sc:var(' + SCOLOR[n.status] + ')" data-go="' + esc(id) + '">' + esc(id) + '</button>'; }
+function wireChips(el) { for (const c of el.querySelectorAll('[data-go]')) c.onclick = () => select(c.getAttribute('data-go')); }
+function legend() {
+  const counts = {}; for (const n of DATA.nodes) counts[n.status] = (counts[n.status] || 0) + 1;
+  $('legend').innerHTML = STATUSES.map(s => '<span><i class="sw" style="--sc:var(' + SCOLOR[s] + ')"></i>' + s + ' <span class="note">' + (counts[s] || 0) + '</span></span>').join('') +
+    '<span><i class="ln"></i>needs (cited)</span><span><i class="ln inf"></i>needs (inferred)</span><span><i class="ln crit"></i>critical path</span>';
+  const live = ST.live ? (ST.live.roadmap ? Object.keys(ST.live.roadmap).length + ' ROADMAP entries and ' + Object.keys(ST.live.decisions || {}).length + ' Decisions read live.' : 'ROADMAP.md could not be read; showing the snapshot titles.') : 'Loading sources…';
+  $('srcNote').textContent = DATA.nodes.length + ' parts. Plan as of ' + DATA.asOf + ', against ' + DATA.records + '. ' + live;
+}
+function critList() { $('critList').innerHTML = ST.crit.map((id, i) => (i ? '<span class="arr" aria-hidden="true">→</span>' : '') + chip(id)).join(''); wireChips($('critList')); }
+function promises() {
+  $('promises').innerHTML = DATA.promises.map(p => '<tr><td>' + esc(p.id) + '</td><td>' + esc(p.text) + '</td><td class="lvl">' + esc(p.level) + '</td><td>' + esc(p.verify) +
+    '</td><td><span class="pst ' + esc(p.today) + '">' + esc(p.today) + '</span></td><td><div class="chips">' + p.nodes.map(chip).join('') + '</div></td></tr>').join('');
+  wireChips($('promises'));
+}
+function orderView() {
+  $('order').innerHTML = DATA.order.map(o => '<div class="stage"><div class="k">' + esc(o.k) + '</div><h4>' + esc(o.title) + '</h4><p>' + esc(o.why) + '</p><div class="chips">' + o.nodes.map(chip).join('') + '</div></div>').join('');
+  wireChips($('order'));
+}
+function applyTheme() {
+  if (ST.theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', ST.theme);
+  $('themeBtn').textContent = 'Theme: ' + ST.theme;
+}
+function fetchFirst(urls) {
+  if (typeof fetch !== 'function' || location.protocol === 'file:') return Promise.resolve(null);
+  return urls.reduce((p, u) => p.then(got => got !== null ? got : fetch(u, { cache:'no-store' }).then(r => r.ok ? r.text() : null).catch(() => null)), Promise.resolve(null));
+}
+function loadSources() {
+  return Promise.all([fetchFirst(SOURCES.roadmap), fetchFirst(SOURCES.decisions), fetchFirst(SOURCES.plan)]).then(([r, d, p]) => {
+    ST.live = { roadmap:r ? parseRoadmap(r) : null, decisions:d ? parseDecisions(d) : null, plan:p ? parsePlanTable(p) : null };
+    legend(); side();
+  });
+}
+function boot() {
+  const t = qp('theme', 'auto'); ST.theme = ['light', 'dark'].includes(t) ? t : 'auto';
+  ST.crit = longestTo(DATA.nodes, SINK) || [];
+  const want = qp('node', ''); if (want && byId(DATA.nodes)[want]) ST.sel = want;
+  applyTheme(); legend(); render(); side(); critList(); promises(); orderView();
+  $('themeBtn').onclick = () => { ST.theme = { auto:'light', light:'dark', dark:'auto' }[ST.theme]; applyTheme(); };
+  $('checkBtn').onclick = () => { loadSources().then(runChecks); };
+  const p = loadSources(); if (qp('check', '') === '1') p.then(runChecks);
+}
+boot();
+</script>
+</body></html>

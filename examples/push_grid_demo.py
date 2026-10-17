@@ -13,7 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 from mts.io.loaders import load_scales, load_chord_qualities
 from mts.core.chord import Chord
 from mts.core.enharmonics import pc_from_name
-from mts.layouts.push_grid import PushGrid
+from mts.cli.push_grid import PushGrid
 
 
 def _paint(text: str, *, fg: str | None = None, bold: bool = False, dim: bool = False) -> str:

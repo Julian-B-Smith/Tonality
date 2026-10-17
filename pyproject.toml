@@ -30,8 +30,9 @@ mcp = [
     # which `mts/mcp/server.py` imports — so an unbounded range resolved to 2.x
     # and made `pip install 'mts[mcp]'` + `python -m mts.mcp` fail with a
     # RuntimeError telling the user to install the extra they had just installed.
-    # CI never saw it: CI deliberately installs only `.[dev]` so the one
-    # server test skips. Upstream keeps the 1.x branch on critical fixes.
+    # CI never saw it: CI deliberately installs only the dev dependencies, so the
+    # SDK tests skip there (the weekly upstream canary now runs them against
+    # current releases). Upstream keeps the 1.x branch on critical fixes.
     # Porting `build_server()` to the 2.x API and dropping this ceiling is a
     # ROADMAP item; until then the ceiling is what makes the documented
     # install actually work.

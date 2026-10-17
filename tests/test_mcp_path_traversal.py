@@ -15,6 +15,8 @@ under them. A new named-asset loader MUST route through
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from mts.mcp import tools
@@ -75,15 +77,23 @@ def test_resolve_named_asset_contains_to_directory(tmp_path):
 
 
 def test_every_named_loader_routes_through_the_guard():
-    """Ratchet: a future name->path loader that skips the guard fails here."""
-    import inspect
-    import mts.rules.library as rules_lib
-    import mts.patterns.library as patterns_lib
+    """Ratchet: a future name->path loader that skips the guard fails here.
 
-    for module in (rules_lib, patterns_lib):
-        source = inspect.getsource(module)
-        # no raw "<DIR> / f"{name}.json"" construction may remain
-        assert 'f"{name}.json"' not in source, (
-            f"{module.__name__} builds a path from a name without the guard — "
-            "route it through io.loaders.resolve_named_asset"
-        )
+    Scans EVERY engine module rather than a hand-kept list: the list version
+    covered rules/ and patterns/ only, so the drum-pattern loader in io/loaders
+    was outside the ratchet (guarded in code, but not by the gate; found by the
+    2026-10-17 drift audit). The only permitted construction is the guard's own.
+    """
+    import mts
+
+    root = Path(mts.__file__).resolve().parent
+    allowed = {root / "io" / "loaders.py": 1}   # resolve_named_asset builds it once
+    offenders = []
+    for path in sorted(root.rglob("*.py")):
+        count = path.read_text(encoding="utf-8").count('f"{name}.json"')
+        if count > allowed.get(path, 0):
+            offenders.append(f"{path.relative_to(root)} ({count})")
+    assert offenders == [], (
+        "builds a path from a name without the guard — route it through "
+        f"io.loaders.resolve_named_asset: {offenders}"
+    )

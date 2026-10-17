@@ -16,11 +16,46 @@ Every MCP tool argument is chosen by a caller the engine cannot trust — **a
 prompt-injected model** on the stdio server, or **any local process** on the HTTP
 bridge. The tool boundary is a trust boundary even on a loopback-only server.
 
+## Known open: the 2026-10-17 independent review (read before trusting the tables below)
+
+An independent reviewer, run on a different model from this file's author,
+attacked the 2026-10-08/09 guards with the inputs a one-mutation-at-a-time
+fuzz table cannot generate: long lists against short ones, huge integers, many
+distinct labels, crafted MIDI files. The guards below hold for what they
+target: path traversal, Content-Length, grid *allocation*, the origin allowlist
+and the MIDI allowlist (33 escape attempts, none through). But **"0 defects"
+was true only of the fuzz table**, and these classes were found. The primary
+agent re-reproduced a sample of them, as marked. ROADMAP gap 27 records them as
+**P0.3**, ordered for fixing.
+
+| # | Class | Example (door) | Reproduced |
+|---|---|---|---|
+| H1 | Exponential search | `realized_voice_leading`, 24 notes vs 12: 2.7 s, about 3.5× per two notes added (all doors). The same search sits inside `search_voicings(from_voicing=…)` | yes |
+| H2 | Unbounded MIDI work | no file-size, event-count or tempo-change cap. 50k notes: 32 s and 700 MB; tempo changes × notes is quadratic (`TempoMap.seconds_at` is linear per call) | code read |
+| H3 | Pairwise label combinatorics | `part_relations` with 600 distinct voices: 15.6 s, 289 MB, a 72 MB response; also `voice_pair_motion`, `chord_network`, `compare_rulesets` | no |
+| H4 | Repair cost | `repair_ruleset`: evaluations are capped, their per-call cost is not (640 pairs: 14 s) | no |
+| H5 | Windows × events | the grid limit counts windows, not work. One 100,000-beat event: 3.6 s CPU, 260 MB | yes |
+| H6 | Parser amplification | `parse_chord` with 120k tokens: 177 MB | yes |
+| H7 | Server wedge | unrestricted default + `path="/dev/stdin"`: mido blocks on the JSON-RPC stream (stdio) or pins a thread (bridge). Needs a regular-file check | code read |
+| M1 | Huge integers | a 400-digit int in any float slot raises `OverflowError` (about 35 tools); the validator checks only floats for finiteness | yes |
+| M2 | `validate_ruleset` raises | `family: []` raises `TypeError`, breaking its report-don't-raise contract | yes |
+| M3–M5 | Payload parsers | `plan_from_payload` (missing keys outside the try), `apply_groove` templates (zero loop length), `transition_cross_entropy` (denormal probability: `OverflowError`) | no |
+| M6 | MIDI tempo 0 | `ZeroDivisionError` in mido escapes `_reading_caller_file` | no |
+| M7 | Bridge JSON | deep nesting raises `RecursionError` and a 5,000-digit literal raises a plain `ValueError`; neither is a `JSONDecodeError`, so the client gets an empty reply. `_finite` is recursive | yes (parser) |
+| M8 | Bridge threads | no read timeout; a partial body pins a thread forever; low fd limits starve legitimate clients | no |
+| M9 | stdio nesting | deeper than about 200 is dropped by the SDK with no reply (upstream behaviour, but our door) | no |
+| L1–L6 | Hardening | origin strings with userinfo pass `urlsplit` (not browser-forgeable); `~nosuchuser` root → `RuntimeError`; `--no-deps -e .` pulls unpinned setuptools in build isolation | no |
+
+The fuzz harness's blind spots are recorded as its own debt: it runs one baseline
+per tool, mutates one argument at a time, and caps integers at 10**18 and
+nesting at 5. A seeded property fuzz over these value classes would have
+caught most of the above.
+
 ## Surfaces
 
 | # | Where untrusted data enters | Who controls it | What it can reach | Guard (strongest first) | Must-fail control |
 |---|---|---|---|---|---|
-| 1 | **MCP tool arguments, stdio** (79 tools) | a prompt-injected model | every engine entry point | pydantic types (FastMCP) → **boundary validator** (`mts/mcp/validation.py`: shape, finiteness) → engine invariants (below) | `tests/test_mcp_fuzz.py` (1,905 mutated calls) + its planted-defect control |
+| 1 | **MCP tool arguments, stdio** (79 tools) | a prompt-injected model | every engine entry point | pydantic types (FastMCP) → **boundary validator** (`mts/mcp/validation.py`: shape, finiteness) → engine invariants (below) | `tests/test_mcp_fuzz.py` (about 2,000 mutated calls, growing with the tool cases) + its planted-defect control |
 | 2 | **HTTP bridge requests** (`127.0.0.1:8012`) | any local process; allowed browser origins | request parsing, then every tool | origin gate (403, *before* the body is read) → strict `Content-Length` (400 non-numeric/negative, 413 over `MAX_BODY_BYTES` = 16 MB) → boundary validator | `test_bridge_content_length` |
 | 3 | **MIDI files** (`midi_file_analysis`, `piano_roll_view`, and import) | whoever wrote the file; **which** file is chosen by a model | `open()` on that path, then mido's parser, the sequence, the meter map | `TONALITY_MIDI_ROOTS` operator allowlist (checked before `open`, on the resolved path; unset = unrestricted, set-but-unusable = closed; Decision 18) → unreadable/truncated → `ValueError`; span limit; **bar budget** (a time-signature byte can encode a denominator up to 2^255) | `tests/test_midi_roots.py` (prefix-sibling, `..` and symlink escapes, and the fail-closed cases), `test_bar_enumeration_budget`, `test_missing_caller_file_is_the_callers_error` |
 | 4 | **Named-library names** (`load_named_*`) | a model | `open()` on the filesystem | `resolve_named_asset`: separators/parent refs/leading dots refused, resolved path must stay inside the library, **≤ 128 chars** | `tests/test_mcp_path_traversal.py` (27 cases), `test_overlong_library_name_is_refused_before_open` |
@@ -75,12 +110,12 @@ The fix also surfaced **two pre-existing bugs that depended on how you connect**
 
 | Residual | Why accepted |
 |---|---|
-| With `TONALITY_MIDI_ROOTS` unset, the MIDI tools read any path the caller names | **Decided 2026-10-09 (Decision 18):** an unrestricted default keeps direct use and the consumers working. The worst a caller learns is "exists / parses as MIDI". Deployments that need confinement set the variable. Expires 2027-04-09 |
+| With `TONALITY_MIDI_ROOTS` unset, the MIDI tools read any path the caller names | **Decided 2026-10-09 (Decision 18):** an unrestricted default keeps direct use and the consumers working. ~~The worst a caller learns is "exists / parses as MIDI".~~ **Wrong (2026-10-17):** a non-regular path such as `/dev/stdin` blocks the reader and wedges the stdio server (H7), and any parseable file can cost unbounded CPU and memory (H2); see *Known open*. Deployments that need confinement set the variable. Expires 2027-04-09 |
 | A symlink swapped inside an allowed root, between the check and the open | requires write access inside the root already. Accepted with an expiry (Decision 18) |
-| A bridge 500 echoes the exception message | 500 now means a genuine engine bug only; the client is the same local user on loopback |
+| A bridge 500 echoes the exception message | The client is the same local user on loopback. ~~500 now means a genuine engine bug only~~: **wrong (2026-10-17)**, because about 40 caller inputs still reach a 500 (M1–M6 in *Known open*) |
 | If the validator **and** a grid guard regress together, the fuzz test could exhaust memory instead of failing | each guard has its own cheap just-over-budget test that fails cleanly first |
 | No `SECURITY-CATALOGUE` file yet | the kit has not shipped the format (Decision 85: "kit deliverables not yet built"); inventing one here would recreate the copy drift kit 2.4.0 ended. This table is the content; the format follows the kit |
-| Row *meaning* (a well-formed note, a valid ruleset) is checked by each tool, not by the boundary validator | the validator checks shape; meaning stays with the tools' own total validators, which already raise `ValueError` |
+| Row *meaning* (a well-formed note, a valid ruleset) is checked by each tool, not by the boundary validator | The validator checks shape; meaning stays with each tool's own validator. **Not all of them are total yet** (M2–M5 in *Known open*) |
 
 ## Supply chain (gap 27(c), 2026-10-09)
 

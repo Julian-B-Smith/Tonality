@@ -49,6 +49,15 @@ no session state here (that lives in `workspace`/`SessionCatalog`).
   seam flags aug-6/secondary-dominant/Neapolitan instead of penalizing their
   chromaticism. `name_chord_across_keys` maps it over ranked `infer_key`
   candidates: per-key conditional namings + key-weighted combined view.
+- `cadence.py` — `detect_cadences`: cadential **formulas** (authentic, plagal,
+  deceptive, half) in a named progression, each an evidenced event. Formula, not a
+  confirmed cadence: without timing, `is_final` is the strongest signal.
+- `succession.py` — `recommend_next_chord`: ranked, tagged next-chord candidates
+  (gap 14) under the versioned `succession.1` scoring prior, with the raw axes
+  exposed so callers can re-rank; `tag_transition` annotates one transition.
+- `meter_estimation.py` — `infer_meter`: ranked time signatures from note
+  content (gap 11). It evidences against the file's declared meter and never
+  overrides it.
 - `tendency.py` — `melodic_tendency`: ranked note-to-note resolutions + the
   12-pc stability landing table (gap 19, A9 Wend — the melodic sibling of
   `next_chord`). Anchoring attraction `(s_q/s_p)/d²` (Lerdahl) over a

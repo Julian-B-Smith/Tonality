@@ -1976,6 +1976,51 @@ windowed batch form; A4's *online* requirement remains with gap 5.
     current `mcp`). Baseline on 2026-10-09: no known vulnerabilities in 41
     components. Still open: **the public registry listing**, Julian's call,
     now unblocked.
+
+    **P0.3 OPENED 2026-10-17: the "fully green" above was overclaimed.** An
+    independent security review was run on a different model from the
+    author, as the doctrine's independence rule requires. It attacked the
+    10-08/09 guards with inputs a one-mutation-at-a-time fuzz table cannot
+    generate, and found work-exhaustion and 500-class classes. The primary agent
+    re-reproduced a sample.
+    - **High:**
+      - an exponential realized voice-leading search (H1: 24 vs 12 notes takes
+        2.7 s, ×3.5 per two notes added);
+      - unbounded MIDI file work, with tempo changes × notes quadratic (H2);
+      - pairwise label combinatorics (H3);
+      - repair cost per evaluation (H4);
+      - windows × events (H5: one 100,000-beat event takes 3.6 s);
+      - parser amplification (H6);
+      - and a **server wedge**: with the unrestricted default,
+        `path="/dev/stdin"` blocks the reader on the JSON-RPC stream (H7).
+    - **Medium:** about 40 inputs still reach a 500.
+      - Huge ints raise `OverflowError` in about 35 tools (M1).
+      - `validate_ruleset` raises on `family: []` (M2), breaking its
+        report-don't-raise contract.
+      - The payload parsers (M3–M5) and a tempo-0 MIDI file (M6) also escape.
+      - The bridge mishandles `RecursionError` from its JSON parser and has
+        no read timeout (M7–M8).
+
+    The guards themselves held for what they target. The miss was the claim
+    "0 defects", which was true of the fuzz table and not of the boundary.
+    Full table: `docs/security/BOUNDARIES.md`, *Known open*.
+
+    **Proposed fix order, as the next slices:**
+    1. H7 + M7, the regular-file check and the bridge JSON/timeout handling:
+       small, and they stop a wedge.
+    2. H1, by replacing the enumeration with an O(n·m) dynamic program and
+       capping list lengths.
+    3. M1–M6: integer, string and list caps in the validator, a depth-safe
+       `_finite`, and total payload parsers.
+    4. H2, with file-size, event and tempo-change caps plus a bisect-based
+       `seconds_at`.
+    5. A work-budget guard for H3–H6.
+    6. Replace the fuzz table's one-mutation design with a seeded property fuzz
+       over the value classes that found these: huge ints, long lists, many
+       labels.
+
+    The registry listing should wait for P0.3, for the same reason it waited
+    for P0.1.
 28. **Drum-pattern analysis — GM roles + named rhythmic patterns** (added and
     **DELIVERED 2026-07-25**, Julian: *"derive information about drum patterns —
     four-on-the-floor or other named identification"*). Two exact measurements
@@ -2242,6 +2287,36 @@ resolutions as ranked, costed options through the recommendation surface.
     discriminator" is a productive loop, not a coincidence — record it as
     the preferred shape for A6 asks. `confirm_key_areas` remains their
     outstanding one, on Julian's sequencing.
+
+34. **The 1.0 line — PROPOSED 2026-10-17, awaiting Julian's ratification**
+    (Julian: "construct a 1.0 spec based on what a system like this would
+    promise in its idealized form"). Tonality has never had a version line;
+    every surface has been free to change. The proposal lives in
+    [`docs/design/1.0-PLAN.md`](docs/design/1.0-PLAN.md), drawn as a
+    dependency graph in [`docs/design/plan-map.html`](docs/design/plan-map.html).
+    Its spine:
+    - **Stability tiers** (stable / provisional / experimental) on every tool
+      and public function. 1.0 freezes only *stable*, which is how it can ship
+      everything without promising everything.
+    - **Locks:** an API-signature lock, published result JSON Schemas
+      (additive-only within 1.x), and a byte lock on every shipped prior
+      version.
+    - **Determinism** across a CI matrix of operating systems × Python versions.
+    - **Performance budgets** with CI ceilings.
+    - **The plan framework** (gap 26's artifact, generalized to at least three
+      producers) and a first-class **voicing template**, both before the
+      generative surface is frozen.
+    - The **MCP SDK 2.x port** (gap 29), so 1.0 does not freeze on a deprecated
+      SDK major.
+    - Generated reference docs, a changelog, and release engineering (PyPI,
+      signed tags, a semver bump checker).
+
+    The promises were drafted from an **independent clean-room agent's** answer
+    to "what would an idealized 1.0 promise" (it saw only an isolated spec,
+    never the code), then reconciled against what exists today. Where the plan
+    departs from that agent, `1.0-PLAN.md` says why. **Nothing here is decided
+    until Julian ratifies it.** The ratification is the next planning act, and
+    its outcome becomes a Decision.
 
 ### Audit sweep #274–#277 (2026-08-19) — the co-scaling-join family, sixth instance
 
@@ -3753,7 +3828,7 @@ architecture already draws that line (the exact-math / versioned-prior split).*
   (identity-carried by composition, not field-threading). Additive `system` param
   on MCP tools defaulting to `"12tet"`; A5/A7 stability contracts untouched.
 
-### Phase 7 (future) — Generative: voice leading & progression realization
+### Phase 7 (in progress) — Generative: voice leading & progression realization
 *Ordering note: the number groups this with the later work, but it depends only on
 shipped layers (voicings, `Realization`, temporal/segmentation) plus optionally
 Phase 4.5 corpus statistics — so it can land before the Phase 6 tuning work.*
@@ -3935,7 +4010,7 @@ frame, recorded here so A2/A3 decompose onto named work):**
   (`next_chord`/`search_identities` candidate source — the different edit
   vocabulary), joint multi-dimension search, rhythm edits/insert/delete.
 
-### Phase 8 (future) — C++ core, dual implementation (Decision 10, revised 2026-06-29)
+### Phase 8 (in progress) — C++ core, dual implementation (Decision 10, revised 2026-06-29)
 A C++ core becomes the **performance / generative / embedded main**; the **Python
 implementation stays a fully-functional peer** (pure-`pip` deploy, scriptability,
 live MCP introspection), both held to the one conformance golden. **Sequencing
@@ -4507,6 +4582,114 @@ Cadence: re-run alongside the theory-grounding review at each phase
 boundary; the two reviews are complementary instruments (assumptions vs
 contracts) and should stay separate passes.
 
+### Pass #2 (2026-10-17) — clean-room efficiency scan
+
+Julian asked for an efficiency scan, with this method:
+1. Isolate the intended design as a spec. The spec said *what* the engine must
+   promise, with no module names.
+2. Have an **independent Opus 5.5 agent** that never saw the code propose an
+   architecture from that spec alone. It did disclose one leak: the harness
+   showed it the root CLAUDE.md, so it saw the layer names but no code.
+3. Weigh the proposal against reality, running its 22 ranked smell detectors
+   mechanically over `mts/` (about 25.4k lines, 111 modules).
+
+**Calibration, so it isn't relitigated:** reality is much closer to the ideal
+than the agent predicted. Four of its top five detectors came back clean.
+- Hand-written `to_dict` totals 576 lines across 119 methods, not the predicted
+  1.5–3k-line sink. The apparent field omissions are all documented and
+  deliberate.
+- Every empirical threshold is versioned data, not Python.
+- The 13 prior loaders already share one `_load_versioned` core.
+- There is one predicate language, shared by rules and search.
+- There is one voice-leading implementation.
+- Piano-roll naming parity holds by construction: it shares the dataset
+  builder.
+- Tests are 0.59× the source size.
+
+The confirmed debt is small and local:
+
+- [ ] **RE-7a — Repeated argument conversion in the tool adapter.**
+      Harmony spans are parsed 3×, `[root, quality]` chord lists 4×, and
+      `[tonic, mode]` keys 7× in `mts/mcp/tools.py`, each copy with its own
+      wording of the caller-facing error. Extract them beside
+      `_canonical_sequence`. No output change.
+- [ ] **RE-7b — The window enumeration is copied verbatim** in
+      `track_keys` and `track_meter`: the stall guard, the `starts` loop and
+      the truncated-window fallback. Region merging has the same shape.
+      Gap 22 would add a third copy. Extract one `window_starts(...)` in
+      `temporal/`. The goldens pin the result byte-for-byte.
+- [ ] **RE-7c — The float-tolerance policy is fragmented.** `_EPS` is
+      defined independently in 23 modules: 19 at 1e-9, and 4 at 1e-6
+      (`patterns/matcher`, `search/repair`, `temporal/drums`,
+      `temporal/relations`). `temporal/parts` adds two more 1e-6
+      tolerances. Whether two onsets coincide therefore depends on which module
+      asks. First, name both tolerances once, with the reason each exists, and
+      import them (no behaviour change). Unifying the values is a separate,
+      golden-reviewed decision.
+- [ ] **RE-7d — Tracking defaults restated as literals on the tool door.**
+      `key_tracking` / `structural_keys` say `window_beats=8.0, hop_beats=2.0`,
+      and `meter_tracking` says `16.0 / 4.0`, instead of importing
+      `DEFAULT_WINDOW_BEATS` / `DEFAULT_HOP_BEATS`. A changed engine default
+      would silently diverge on the tool door.
+- [ ] **RE-7e — Byte-identical twins** `_normalize_degrees` /
+      `_normalize_intervals` in `session.py`.
+- [ ] **RE-7f — Julian's call:** `mts/workspace.py` (179 lines; documented as an
+      entry point) has **no test**. Test it, or demote it.
+- [ ] **RE-7g — Julian's call:** `mts/cli/` (811 lines; recorded as "kept as an
+      example consumer") **ships inside the installed package**. Moving it to
+      `examples/` would reverse a recorded keep.
+
+- [ ] **RE-7h — Analysis reaches up into generation.** `temporal/runs.py`
+      (`find_scale_runs`, an analysis) lazily imports the PRIVATE
+      `generate.remap._resolve_degrees`. That is upward against the layer
+      diagram, and private across a package boundary. Move the helper below both
+      packages (a public `resolve_scale_degrees` beside `load_scales`). Found by
+      the drift audit's import graph.
+- [ ] **RE-7i — `scripts/validate_function_mappings.py` reports correct theory
+      as mismatches.** It checks minor-mode functions against Aeolian only, so
+      the raised-7th and raised-6th chords (V, V7, vii°, viiø7, i-maj7) print as
+      seven "mismatches" while the script exits 0. It is in no test or CI gate,
+      even though the README calls it a self-check. Either check minor against
+      the natural, harmonic and melodic collections, and gate it, or drop the
+      README claim.
+
+**Docs-vs-code drift audit (same day, run on Sonnet 5.5 for independence).**
+It found 22 findings and listed about 60 checked claims that held. Fixed in the
+same PR:
+- **The README quickstart crashed.** RE-6e removed a helper it imported, and
+  nothing ran `examples/`. Both examples now run, gated by
+  `tests/test_examples.py`.
+- **Four tool descriptions named `kk-1982.1` as the default key profile,**
+  four months after the CBMS flip. Agents read these descriptions.
+- **INTEGRATION.md stated the inverted structural-key rule** with the old
+  prior version, and its "Coming" list advertised four shipped capabilities as
+  future work.
+- **README listed nonexistent functional-harmony JSON tables.**
+- **CLAUDE.md's layer diagram** omitted `dataset/` and `context/` and misplaced
+  `io/`.
+- **The path-traversal ratchet** listed 2 of 3 loader modules by hand. It now
+  scans every module (L0006).
+- **Stale counts and headings:** the skip count, test counts, the fuzz count,
+  and the Phase 7/8 "(future)" headings.
+
+Left for Julian: the README/LICENSE copyright link points at
+`github.com/Lifted-Truck`, which now resolves to a *different* account (id
+327302250, created 2026-09-10). Repo slugs redirect after a rename; user pages
+do not. LICENSE text is operative, so it is his edit.
+
+**Not worth scraping (recorded so it isn't re-proposed):**
+- Ranked-result field names vary (`candidates` / `alternatives` /
+  `readings`), but they are consumer-visible JSON. Unify them only under a 1.0
+  schema freeze, if ever.
+- The roughly eight degree-mapping helpers mostly map *different things*
+  (pc→degree in a context, MIDI→degree, a mode's degree set); merging them
+  would couple layers that are deliberately apart.
+- The long functions (`induce_ruleset` 296 lines, `track_keys` 207) are long
+  but cohesive.
+- The agent's larger architectural ideas are 2.0-sized, not scrapes:
+  `Fraction` beats instead of floats plus `_EPS`, and tools generated from
+  signatures.
+
 ## Horizon — speculative & ecosystem ideas
 
 > The home for **not-yet-committed** ideas — cross-project visions, "wouldn't it be
@@ -4594,8 +4777,9 @@ contracts) and should stay separate passes.
 
 ## Demoted / deferred (built for the old "app" frame)
 
-- `gui/` (Qt) and the audio backend — not on the library/MCP path. Don't delete;
-  don't let them shape core architecture.
+- `gui/` (Qt) — **removed 2026-06-29** (b2bbb5e, "remove dead code — deferred Qt
+  GUI"); recoverable from git history. It was never on the library/MCP path; any
+  future GUI is a consumer project's, per Phase 5's library-first decision.
 - `cli/push.py` — keep as an **example consumer**, not a foundation component.
 
 ## Parked work (branches)

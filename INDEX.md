@@ -17,6 +17,7 @@ Each line: `[Lxxxx] tags — one-line hook → resolves to the LIBRARY anchor`.
 - [L0003]  `workflow,architecture` — joining two co-scaling collections: use `area_indices`/`_sweep_active`, never an inline rescan. Filed 4× (#206/#214/#246/#256). Invisible at fixture scale; verify fixes by byte-diffing output.
 - [L0004]  `coordination,contracts` — hand over the DOMAIN with the finding: a mechanism transfers between projects, a severity does not (HYPERSAW-002).
 - [L0005]  `workflow,coordination` — when a fix lands, grep its SIBLINGS (neighbour modules + the layer's CLAUDE.md/docstrings): #262→#275, #288→#295.
+- [L0006]† `workflow,contracts` — a gate over "every X" must DISCOVER X from the tree; a hand-kept list or an unrun README command is a silent hole (quickstart broken for months; traversal ratchet missed a loader).
 
 <!--
 Scope reminder (full rules in CLAUDE.md § Scope boundary): LIBRARY holds only

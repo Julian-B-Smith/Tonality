@@ -1,57 +1,45 @@
-"""Quickstart demo for the music theory engine."""
+"""Quickstart: the engine's Python door in five calls.
+
+Run from the repo root after `pip install -e .`:
+
+    python examples/quickstart_engine_demo.py
+
+Each call returns a typed result with a `to_dict()` JSON form; everything is
+pitch-class arithmetic (C = 0). Spelling note names is a display concern, so the
+output below prints numbers. tests/test_examples.py runs this file, so the
+README's first command cannot silently break again (it did: the old demo
+imported a helper removed as dead code in RE-6e).
+"""
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+from mts.analysis import infer_key, interpret_chord, name_chord, voice_leading
+from mts.analysis.pcset_math import set_class_data
+from mts.core.bitmask import mask_from_pcs
 
-# TODO: remove when package is installed in editable mode.
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-
-from mts.core.chord import Chord, chord_degree_labels, chord_in_scale
-from mts.core.scale import Scale
-from mts.io.loaders import load_chord_qualities, load_scales
-from mts.layouts.push3 import Push3Layout
-
-
-def print_scale_info(scale: Scale) -> None:
-    print(f"Scale: {scale.name} degrees={list(scale.degrees)} symmetry_order={scale.symmetry_order}")
-
-
-def print_chord_info(label: str, chord: Chord, ionian_mask: int, ionian_degrees: list[int]) -> None:
-    spelled = chord.spelled()
-    in_scale = chord_in_scale(chord, ionian_mask)
-    degrees = chord_degree_labels(chord, scale_root_pc=0, scale_degrees=ionian_degrees)
-    print(f"Chord {label}: spelled={spelled} in_C_Ionian={in_scale} degrees={degrees}")
-
-
-def demo_push3_layout(row_offset: int, root_pc: int) -> None:
-    layout = Push3Layout(row_offset=row_offset, root_pc=root_pc)
-    grid = layout.grid()
-    print("Push-3 layout (top-left 3 rows):")
-    for row in grid[:3]:
-        print(row)
+C_MAJ7 = [0, 4, 7, 11]
+A_MIN7 = [9, 0, 4, 7]   # the same pitch classes as C6: one set, several names
 
 
 def main() -> None:
-    scales = load_scales()
-    qualities = load_chord_qualities()
+    sc = set_class_data(mask_from_pcs(C_MAJ7)).to_dict()
+    print(f"set class of Cmaj7: prime form {sc['prime_form']}, |f5| (diatonicity) {sc['dft_magnitudes'][4]:.3f}")
 
-    ionian = scales["Ionian"]
-    dorian = scales["Dorian"]
+    readings = interpret_chord(A_MIN7).to_dict()["interpretations"]
+    print("every reading of {9,0,4,7}: " + ", ".join(f"{r['quality']} on pc {r['root_pc']}" for r in readings))
 
-    print_scale_info(ionian)
-    print_scale_info(dorian)
+    chosen = name_chord([2, 5, 9, 0], context=None).to_dict()["chosen"]
+    print(f"chosen naming of {{2,5,9,0}} with no key given: {chosen['interpretation']['quality']} "
+          f"on pc {chosen['interpretation']['root_pc']}, evidence {[e['signal'] for e in chosen['evidence']]}")
 
-    cmaj7 = Chord.from_quality(0, qualities["maj7"])
-    dmin7 = Chord.from_quality(2, qualities["min7"])
-    g7 = Chord.from_quality(7, qualities["7"])
+    # Duration-weighted pitch-class content of a C-major passage (index = pc).
+    weights = [4, 0, 2, 0, 3, 1, 0, 4, 0, 2, 0, 1]
+    key = infer_key(weights).to_dict()
+    top = key["candidates"][0]
+    print(f"key: tonic pc {top['tonic_pc']} {top['mode']}, margin {key['margin']:.3f} ({key['profile_version']})")
 
-    ionian_degrees = list(ionian.degrees)
-    for name, chord in [("Cmaj7", cmaj7), ("Dmin7", dmin7), ("G7", g7)]:
-        print_chord_info(name, chord, ionian.mask, ionian_degrees)
-
-    demo_push3_layout(row_offset=5, root_pc=0)
+    vl = voice_leading([0, 4, 7], [5, 9, 0]).to_dict()
+    print(f"voice leading C → F: distance {vl['distance']}, mapping {vl['mapping']}")
 
 
 if __name__ == "__main__":
