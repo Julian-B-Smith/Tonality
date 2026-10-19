@@ -41,7 +41,7 @@ mcp = [
 validation = [
     # Corpus accuracy harness (validation/) — parses RomanText ground truth and
     # renders scores to MIDI. Optional dev/test extra, never a runtime dep.
-    "music21>=9",
+    "music21>=9.9.2",
 ]
 dev = [
     # Test + coverage tooling. The conformance golden is the spec both
