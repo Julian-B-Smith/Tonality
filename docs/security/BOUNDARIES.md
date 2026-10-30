@@ -36,13 +36,13 @@ agent re-reproduced a sample of them, as marked. ROADMAP gap 27 records them as
 | H4 | Repair cost | `repair_ruleset`: evaluations are capped, their per-call cost is not (640 pairs: 14 s) | no |
 | H5 | Windows × events | the grid limit counts windows, not work. One 100,000-beat event: 3.6 s CPU, 260 MB | yes |
 | H6 | Parser amplification | `parse_chord` with 120k tokens: 177 MB | yes |
-| H7 | Server wedge | unrestricted default + `path="/dev/stdin"`: mido blocks on the JSON-RPC stream (stdio) or pins a thread (bridge). Needs a regular-file check | code read |
+| H7 | Server wedge | **Fixed 2026-10-30** (P0.3 slice 1): non-regular paths are refused before opening; `test_a_fifo_is_refused_not_opened`, proven end to end on the stdio server. unrestricted default + `path="/dev/stdin"`: mido blocks on the JSON-RPC stream (stdio) or pins a thread (bridge). Needs a regular-file check | code read |
 | M1 | Huge integers | a 400-digit int in any float slot raises `OverflowError` (about 35 tools); the validator checks only floats for finiteness | yes |
 | M2 | `validate_ruleset` raises | `family: []` raises `TypeError`, breaking its report-don't-raise contract | yes |
 | M3–M5 | Payload parsers | `plan_from_payload` (missing keys outside the try), `apply_groove` templates (zero loop length), `transition_cross_entropy` (denormal probability: `OverflowError`) | no |
 | M6 | MIDI tempo 0 | `ZeroDivisionError` in mido escapes `_reading_caller_file` | no |
-| M7 | Bridge JSON | deep nesting raises `RecursionError` and a 5,000-digit literal raises a plain `ValueError`; neither is a `JSONDecodeError`, so the client gets an empty reply. `_finite` is recursive | yes (parser) |
-| M8 | Bridge threads | no read timeout; a partial body pins a thread forever; low fd limits starve legitimate clients | no |
+| M7 | Bridge JSON | **Fixed 2026-10-30** (slice 1): unparseable bodies get a 400, and the validator walk is iterative with `MAX_NESTING` = 64; `test_unparseable_bodies_get_a_400_not_an_empty_reply`. deep nesting raises `RecursionError` and a 5,000-digit literal raises a plain `ValueError`; neither is a `JSONDecodeError`, so the client gets an empty reply. `_finite` is recursive | yes (parser) |
+| M8 | Bridge threads | **Fixed 2026-10-30** (slice 1): a 10 s read timeout and a 408 on a stalled body. A connection cap was not added: the timeout already frees idle threads. no read timeout; a partial body pins a thread forever; low fd limits starve legitimate clients | no |
 | M9 | stdio nesting | deeper than about 200 is dropped by the SDK with no reply (upstream behaviour, but our door) | no |
 | L1–L6 | Hardening | origin strings with userinfo pass `urlsplit` (not browser-forgeable); `~nosuchuser` root → `RuntimeError`; `--no-deps -e .` pulls unpinned setuptools in build isolation | no |
 

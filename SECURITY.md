@@ -42,9 +42,11 @@ checks locally.
 ## Known open issues
 
 The 2026-10-17 independent review found work-exhaustion and error-handling
-classes that the 2026-10-08 guards do not cover. Among them, with the default
-unrestricted MIDI path, a caller can block the stdio server by naming a
-non-regular file such as `/dev/stdin`. Until that is fixed, set
-`TONALITY_MIDI_ROOTS` on any server whose caller you do not control. The full
-list and the fix order are in `docs/security/BOUNDARIES.md` (*Known open*) and
-ROADMAP gap 27 (P0.3).
+classes that the 2026-10-08 guards do not cover. The server wedge through a
+non-regular path such as `/dev/stdin`, and the bridge's JSON and stalled-body
+handling, were fixed on 2026-10-30. The work-exhaustion classes are still open:
+an exponential voice-leading search, unbounded MIDI file work, and pairwise
+label combinatorics. Until they are fixed, do not expose a server to callers
+you do not control. Set `TONALITY_MIDI_ROOTS` either way. The full list and the
+fix order are in `docs/security/BOUNDARIES.md` (*Known open*) and ROADMAP
+gap 27 (P0.3).

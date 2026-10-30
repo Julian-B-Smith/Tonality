@@ -39,22 +39,39 @@ def _describe(value) -> str:
     return "None" if value is None else type(value).__name__
 
 
-def _finite(value, where: str) -> str | None:
-    """Every float anywhere inside must be finite (NaN/inf are never valid
-    musical input, and infinity sizes windowed analyses without bound)."""
+# No real argument nests deeper than a handful of levels (a list of events, a
+# ruleset's rules and their conditions). 64 is far above that and far below
+# Python's recursion limit, so every later recursive walk -- json.dumps of the
+# echo, the engine's own parsers -- is safe once this passes. (P0.3 slice 1,
+# 2026-10-17 review M7: a 3,000-deep payload reached this walk's old recursive
+# form and escaped as RecursionError, a 500.)
+MAX_NESTING = 64
 
-    if isinstance(value, float) and not math.isfinite(value):
-        return f"{where} must be finite, got {value!r}"
-    if isinstance(value, list):
-        for i, item in enumerate(value):
-            problem = _finite(item, f"{where}[{i}]")
-            if problem:
-                return problem
-    elif isinstance(value, dict):
-        for k, item in value.items():
-            problem = _finite(item, f"{where}[{k!r}]")
-            if problem:
-                return problem
+
+def _finite(value, where: str) -> str | None:
+    """Walk the whole payload: every float must be finite, and nothing may nest
+    deeper than ``MAX_NESTING`` (NaN/inf are never valid musical input, and
+    infinity sizes windowed analyses without bound).
+
+    Iterative on purpose: a recursive walk over attacker-chosen depth IS the
+    RecursionError it is meant to prevent. Children are pushed in reverse so the
+    first problem reported is the same one the old depth-first recursion found.
+    """
+
+    stack = [(value, where, 0)]
+    while stack:
+        item, path, depth = stack.pop()
+        if isinstance(item, float) and not math.isfinite(item):
+            return f"{path} must be finite, got {item!r}"
+        if isinstance(item, (list, dict)):
+            if depth >= MAX_NESTING:
+                return (f"{where} nests deeper than {MAX_NESTING} levels "
+                        "(mts.mcp.validation.MAX_NESTING)")
+            if isinstance(item, list):
+                children = [(v, f"{path}[{i}]") for i, v in enumerate(item)]
+            else:
+                children = [(v, f"{path}[{k!r}]") for k, v in item.items()]
+            stack.extend((v, p, depth + 1) for v, p in reversed(children))
     return None
 
 

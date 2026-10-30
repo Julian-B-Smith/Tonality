@@ -59,6 +59,12 @@ _TOOL_MAP = {fn.__name__: fn for fn in TOOLS}
 #: events list for a whole piece: at the engine's span limit (100,000 beats) a
 #: dense one is a few MB of JSON. 16 MB is far above that and far below harm.
 MAX_BODY_BYTES = 16 * 1024 * 1024
+# Seconds a connection may sit without sending what it promised. Without it, a
+# client that sends `Content-Length: 100` and two bytes pins a handler thread
+# forever, and enough of them starve the process of file descriptors (P0.3
+# slice 1, 2026-10-17 review M8). It bounds socket WAITS only, never a tool's
+# own computation, and loopback delivers a full 16 MB body in well under it.
+READ_TIMEOUT_SECONDS = 10.0
 
 
 def origin_allowed(
@@ -112,6 +118,9 @@ def _service_info() -> dict:
 
 class BridgeHandler(BaseHTTPRequestHandler):
     server_version = "TonalityBridge/0.1"
+    # StreamRequestHandler applies this to the socket in setup(); it also closes
+    # idle keep-alive connections, which is what frees their threads.
+    timeout = READ_TIMEOUT_SECONDS
 
     def log_message(self, format, *args):  # noqa: A002 - stdlib signature
         pass  # a library-embedded local server should not spam stderr
@@ -227,10 +236,24 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 413, f"Request body of {length:,} bytes exceeds the bridge limit of "
                 f"{MAX_BODY_BYTES:,} (mts.mcp.bridge.MAX_BODY_BYTES).", "PayloadTooLarge")
             return
-        raw = self.rfile.read(length) if length else b""
+        try:
+            raw = self.rfile.read(length) if length else b""
+        except TimeoutError:
+            self.close_connection = True
+            self._send_error(408, f"Request body did not arrive within {READ_TIMEOUT_SECONDS:g} s "
+                             "(mts.mcp.bridge.READ_TIMEOUT_SECONDS).", "RequestTimeout")
+            return
+        # ValueError, not just JSONDecodeError: an integer literal past Python's
+        # 4,300-digit limit raises a plain ValueError, and deep nesting raises
+        # RecursionError. Both used to escape do_POST, so the client got an empty
+        # reply instead of a status (2026-10-17 review M7).
         try:
             kwargs = json.loads(raw) if raw else {}
-        except json.JSONDecodeError as exc:
+        except RecursionError:
+            self._send_error(400, "Request body is not valid JSON: nested too deeply to parse.",
+                             "JSONDecodeError")
+            return
+        except ValueError as exc:
             self._send_error(400, f"Request body is not valid JSON: {exc}", "JSONDecodeError")
             return
         if not isinstance(kwargs, dict):
