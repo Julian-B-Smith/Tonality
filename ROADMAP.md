@@ -2097,6 +2097,14 @@ windowed batch form; A4's *online* requirement remains with gap 5.
     the two tests that touch `mcp.server.fastmcp`. That is the whole port
     surface, confirmed small. Dependabot on pyproject's ranges will also
     propose the 2.x bump; review it as this gap, not as a routine bump.
+    **It did, and it merged (2026-10-30, #312: `mcp>=1.2,<3`).** Every check
+    was green, because CI installs from the lock (mcp 1.30.0) and never
+    resolves the extra. A fresh `pip install -e '.[mcp]'` then took mcp 2.3.0,
+    and `build_server()` raised the audit-#245 error again. Restored the same
+    day. The ceiling is now **gated, not just commented**:
+    `test_the_mcp_ceiling_matches_the_server_api` fails any range that admits
+    2.x while `server.py` imports `mcp.server.fastmcp` (proven red on that
+    main). Dependabot ignores mcp ≥2 until this gap's port PR removes both.
 30. **Two frames of pair-grain analysis — no first-class `TransitionIdentity`**
     (logged 2026-08-09 from Julian's question; open concern, unscheduled). A
     chord *pair* admits two analyses that are different objects: **(1) the

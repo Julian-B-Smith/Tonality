@@ -144,3 +144,39 @@ def test_controls_sbom_gate_sees_a_stale_file(monkeypatch, tmp_path):
     stale.write_text(sbom.render().replace('"1.3.3"', '"1.3.2"', 1), encoding="utf-8")
     monkeypatch.setattr(sbom, "SBOM_PATH", stale)
     assert sbom.main(["--check"]) == 1
+
+
+# --- the mcp ceiling is load-bearing (audit #245, ROADMAP gap 29) ----------------------------
+
+
+def ceiling_problems(mcp_spec: str, server_source: str) -> list[str]:
+    """While the server is written against the 1.x API, the extra must not admit 2.x.
+
+    mcp 2.0.0 removed `mcp.server.fastmcp`. A range that admits 2.x makes the
+    documented `pip install 'mts[mcp]'` resolve the newest 2.x and the server
+    fail with "install the extra you just installed". CI cannot see that on its
+    own: it installs from the lock, which pins 1.x. Dependabot widened the
+    range to <3 on 2026-10-30 (#312) and every check passed, which is why this
+    gate exists. Drop it with the ceiling when gap 29 ports build_server().
+    """
+    if "mcp.server.fastmcp" not in server_source:
+        return []
+    req = Requirement(mcp_spec)
+    if req.specifier.contains("2.0.0", prereleases=True):
+        return [f"{mcp_spec!r} admits mcp 2.x, but mts/mcp/server.py imports the 1.x-only "
+                "mcp.server.fastmcp; restore the <2 ceiling or port the server (gap 29)"]
+    return []
+
+
+def test_the_mcp_ceiling_matches_the_server_api():
+    spec = next(r for r in _pyproject_requirements("mcp") if Requirement(r).name == "mcp")
+    server = (ROOT / "mts" / "mcp" / "server.py").read_text(encoding="utf-8")
+    assert ceiling_problems(spec, server) == []
+
+
+def test_controls_ceiling_checker_sees_plants():
+    fastmcp = "from mcp.server.fastmcp import FastMCP"
+    assert ceiling_problems("mcp>=1.2,<2", fastmcp) == []
+    assert ceiling_problems("mcp>=1.2,<3", fastmcp)        # #312's widening
+    assert ceiling_problems("mcp>=1.2", fastmcp)           # no ceiling at all
+    assert ceiling_problems("mcp>=1.2,<3", "from mcp.server import MCPServer") == []  # ported

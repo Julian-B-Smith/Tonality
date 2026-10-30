@@ -36,7 +36,7 @@ mcp = [
     # Porting `build_server()` to the 2.x API and dropping this ceiling is a
     # ROADMAP item; until then the ceiling is what makes the documented
     # install actually work.
-    "mcp>=1.2,<3",
+    "mcp>=1.2,<2",
 ]
 validation = [
     # Corpus accuracy harness (validation/) — parses RomanText ground truth and
