@@ -2006,8 +2006,14 @@ windowed batch form; A4's *online* requirement remains with gap 5.
     Full table: `docs/security/BOUNDARIES.md`, *Known open*.
 
     **Proposed fix order, as the next slices:**
-    1. H7 + M7, the regular-file check and the bridge JSON/timeout handling:
-       small, and they stop a wedge.
+    1. ~~H7 + M7, the regular-file check and the bridge JSON/timeout handling:
+       small, and they stop a wedge.~~ **DONE 2026-10-30 (slice 1, with M8):**
+       non-regular MIDI paths are refused before opening. On `main` the stdio
+       server wedged on `/dev/stdin`; it now answers with a reason, and the next
+       call works. Unparseable bridge bodies get a 400. The validator's payload
+       walk is iterative with a 64-level nesting cap. The bridge gets a 10 s read
+       timeout and a 408 for a stalled body. 13 tests in
+       `tests/test_boundary_robustness.py`; each fix proven by removal.
     2. H1, by replacing the enumeration with an O(n·m) dynamic program and
        capping list lengths.
     3. M1–M6: integer, string and list caps in the validator, a depth-safe

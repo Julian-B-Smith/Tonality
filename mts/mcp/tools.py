@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import stat
 import typing
 from pathlib import Path
 
@@ -2132,6 +2133,36 @@ def _require_allowed_midi_path(path: str) -> None:
     )
 
 
+def _require_regular_file(path: str) -> None:
+    """Refuse anything but a regular file BEFORE the reader opens it.
+
+    With the allowlist unset (the default), a caller could name `/dev/stdin`, a
+    FIFO or a tty. Opening those blocks: on the stdio server mido's read consumed
+    the JSON-RPC stream itself and wedged every later call; on the bridge it
+    pinned a thread forever (2026-10-17 review H7). `os.stat` follows symlinks, so
+    a link to a device is refused too.
+
+    A MISSING path is left to the reader on purpose: the pipeline checks its own
+    arguments before it reads, and a caller who got both wrong should hear about
+    the argument conflict first, as before (tests/test_canonical_events.py pins
+    that order). Any other stat failure is reported here as the caller's error.
+
+    Residual, accepted: the path could be swapped between this check and the
+    open. That needs write access to the directory, the same bar as the
+    allowlist's symlink-swap residual (Decision 18).
+    """
+
+    try:
+        mode = os.stat(path).st_mode
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(mode):
+        raise ValueError(
+            f"the MIDI path {path!r} is not a regular file; devices, FIFOs and "
+            "directories are refused because reading them can block the server"
+        )
+
+
 @contextlib.contextmanager
 def _reading_caller_file(path: str):
     """Report an unreadable caller-supplied file as the CALLER's error.
@@ -2146,6 +2177,7 @@ def _reading_caller_file(path: str):
 
     _require_allowed_midi_path(path)
     try:
+        _require_regular_file(path)
         yield
     except (OSError, EOFError) as exc:
         reason = getattr(exc, "strerror", None) or str(exc) or "truncated or malformed file"
