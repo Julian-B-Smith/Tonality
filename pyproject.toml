@@ -47,7 +47,7 @@ dev = [
     # Test + coverage tooling. The conformance golden is the spec both
     # implementations are graded against (Decision 10); line coverage of the
     # Python reference matters most for the core identity layer the C++ port mirrors.
-    "pytest>=8",
+    "pytest>=9.1.1",
     "coverage>=7",
 ]
 
