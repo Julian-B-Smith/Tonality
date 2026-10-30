@@ -5,8 +5,9 @@
 #     its `# vX.Y.Z` comment together.
 #   * pip on pyproject.toml, with `versioning-strategy: increase-if-necessary`:
 #     a range is touched only when a release falls OUTSIDE it, so this fires
-#     on a new major past a ceiling (mcp 2.x is exactly gap 29's signal), not
-#     on every patch. The default strategy raised every floor instead
+#     on a new major past a ceiling, not on every patch. mcp 2.x is ignored
+#     below until gap 29 ports the server; widening that ceiling is the port,
+#     never a routine bump. The default strategy raised every floor instead
 #     (#305–#309, opened 2026-10-09 minutes after #302 merged), which the
 #     first version of this comment wrongly said would not happen.
 #
@@ -24,3 +25,12 @@ updates:
     versioning-strategy: increase-if-necessary
     schedule:
       interval: weekly
+    ignore:
+      # The <2 ceiling is load-bearing until gap 29 ports build_server() to the
+      # 2.x API: mcp 2.0 removed mcp.server.fastmcp. Dependabot proposed <3 on
+      # 2026-10-30 (#312), it merged with every check green, and the documented
+      # install broke. tests/test_supply_chain.py now fails that PR; this stops
+      # it being re-proposed weekly. The upstream canary's "newest" leg is the
+      # signal that 2.x moved. Remove this block in gap 29's port PR.
+      - dependency-name: "mcp"
+        versions: [">=2"]
