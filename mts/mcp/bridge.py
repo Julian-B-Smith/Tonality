@@ -16,7 +16,8 @@ Endpoints:
 - ``POST /call/<name>``  invoke a tool; body is a JSON object of keyword
   arguments. Success: ``{"ok": true, "result": ...}``. Failure: 400 with
   ``{"ok": false, "error": ..., "error_type": ...}`` for bad input — a
-  ``ValueError`` from the engine, or a ``TypeError`` from *binding* the
+  ``ValueError`` or ``SpecificationError`` (the cardinal rule's refusal of
+  under-specified input) from the engine, or a ``TypeError`` from *binding* the
   kwargs (unknown/missing arguments); 404 for unknown tools; 500 otherwise,
   **including a TypeError raised inside the engine** (an engine bug is not
   the client's fault — RE-4e).
@@ -46,6 +47,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
+from ..analysis.errors import SpecificationError
 from .tools import TOOLS
 
 DEFAULT_HOST = "127.0.0.1"
@@ -271,7 +273,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         try:
             result = fn(**kwargs)
             self._send(200, {"ok": True, "result": result})
-        except ValueError as exc:
+        except (ValueError, SpecificationError) as exc:
+            # SpecificationError is the cardinal rule's deliberate refusal of
+            # under-specified input — the caller's to fix, not an engine bug.
             self._send_error(400, str(exc), type(exc).__name__)
         except Exception as exc:  # noqa: BLE001 - bridge must answer, not die
             self._send_error(500, f"{type(exc).__name__}: {exc}", type(exc).__name__)
