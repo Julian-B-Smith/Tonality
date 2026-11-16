@@ -193,6 +193,23 @@ def test_engine_internal_typeerror_is_a_500(base_url, monkeypatch):
     assert "engine bug" in body["error"]
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"source_midi": [], "target_midi": [60, 64, 67]},
+        {"source_midi": [60, 64, 67], "target_midi": []},
+    ],
+)
+def test_specification_error_is_a_400_not_an_engine_bug(base_url, payload):
+    # Issue 316: the cardinal rule's deliberate refusal of under-specified
+    # input (SpecificationError, not a ValueError subclass) is the caller's
+    # mistake and must not be reported as a 500 engine bug.
+    status, _, body = _request(f"{base_url}/call/realized_voice_leading", payload)
+    assert status == 400
+    assert body["ok"] is False
+    assert body["error_type"] == "SpecificationError"
+
+
 # --- RE-4e follow-through: the origin allowlist (A6's design answer) ---------------------
 
 
